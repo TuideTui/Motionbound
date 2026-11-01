@@ -5,6 +5,7 @@ import br.edu.motionbound.game.GameAssets;
 import br.edu.motionbound.game.SaveData;
 import br.edu.motionbound.game.CombatRules;
 import br.edu.motionbound.game.MeleeSwing;
+import br.edu.motionbound.game.CampaignLevel;
 import br.edu.motionbound.ui.GameUi;
 import br.edu.motionbound.ui.GameUi.Screen;
 import br.edu.motionbound.input.ControlSource;
@@ -31,6 +32,10 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 public final class MotionboundGame extends ApplicationAdapter {
     private static final int VIEW_W=384, VIEW_H=216, TILE=16;
     private Screen scene=Screen.MODE_SELECT;
+    private Screen resumeScene=Screen.PLAYING;
+    private int stage=1;
+    private float introRemaining;
+    private boolean stageComplete;
     private GameMode mode=GameMode.CONVENTIONAL,savedMode=GameMode.CONVENTIONAL;
     private SpriteBatch batch;
     private ShapeRenderer shapes;
@@ -117,14 +122,14 @@ public final class MotionboundGame extends ApplicationAdapter {
         ui.resize(Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
     }
     private void resetWorld() {
-        dungeon=new DungeonMap();
-        player=new Hero();player.x=7*TILE+8;player.y=8*TILE+8;
+        dungeon=new DungeonMap(stage);
+        player=new Hero();player.x=dungeon.startX();player.y=dungeon.startY();
+        introRemaining=0;stageComplete=false;resumeScene=Screen.PLAYING;cursorVisible=false;
         enemies.clear(); spells.clear();sparks.clear();hearts.clear();deaths.clear();
         aim.set(0,-1);swing.elapsed=-1;swing.impacted=false;
         attacks=0;hits=0;magicCasts=0;healsUsed=0;heartsCollected=0;
         if(controls instanceof SimulatedSensorSource simulated)simulated.sensors.clearMetrics();
-        spawn(13,12,0);spawn(30,8,0);spawn(39,12,1);
-        spawn(8,27,0);spawn(20,21,1);spawn(38,23,0);spawn(46,26,1);
+        for(CampaignLevel.Spawn enemy:dungeon.level.spawns(dungeon))spawn(enemy.tileX(),enemy.tileY(),enemy.type());
         totalEnemies=enemies.size; defeated=0;elapsed=0;screenShake=0;
         worldCamera.position.set(Math.max(VIEW_W/2f,player.x),Math.max(VIEW_H/2f,player.y),0);
         worldCamera.update();
@@ -132,20 +137,36 @@ public final class MotionboundGame extends ApplicationAdapter {
     private void spawn(int tileX,int tileY,int type) {
         enemies.add(new Enemy(tileX*TILE+8,tileY*TILE+8,type));
     }
+    private void startStage() {
+        resetWorld();introRemaining=CampaignLevel.INTRO_SECONDS;
+        controls.reset();message="";scene=Screen.LEVEL_INTRO;resumeScene=scene;
+    }
+    private void newCampaign() {stage=1;startStage();}
+    private void nextStage() {
+        if(!stageComplete||dungeon.level.last())return;
+        stage++;startStage();
+    }
+    private void pauseExpedition() {resumeScene=scene;scene=Screen.PAUSED;controls.reset();}
+    private void updateIntro(float delta) {
+        introRemaining=Math.max(0,introRemaining-delta);
+        if(introRemaining==0){controls.reset();scene=Screen.PLAYING;resumeScene=scene;}
+    }
     @Override public void render() {
-        float dt=Math.min(Gdx.graphics.getDeltaTime(),1f/30f);
+        float frameDelta=Math.max(0,Gdx.graphics.getDeltaTime());
+        float dt=Math.min(frameDelta,1f/30f);
         if(scene!=Screen.PAUSED) uiTime+=dt;
         if(Gdx.input.isKeyJustPressed(Input.Keys.F11)) toggleFullscreen();
         if(Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            if(scene==Screen.PLAYING) {scene=Screen.PAUSED;controls.reset();}
-            else if(scene==Screen.PAUSED && !ui.backToSummary()) {scene=Screen.PLAYING;controls.reset();}
+            if(scene==Screen.PLAYING||scene==Screen.LEVEL_INTRO||scene==Screen.LEVEL_COMPLETE)pauseExpedition();
+            else if(scene==Screen.PAUSED && !ui.backToSummary()) {scene=resumeScene;controls.reset();}
             else if(scene==Screen.MENU||scene==Screen.REHAB_SETUP)scene=Screen.MODE_SELECT;
         }
         if((scene==Screen.DEFEAT||scene==Screen.VICTORY) && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
-            resetWorld();scene=Screen.PLAYING;
+            if(scene==Screen.VICTORY)newCampaign();else startStage();
         }
-        if(scene==Screen.PLAYING) {
-            if(Gdx.input.isKeyJustPressed(Input.Keys.R)){resetWorld();}
+        if(scene==Screen.LEVEL_INTRO)updateIntro(frameDelta);
+        else if(scene==Screen.PLAYING) {
+            if(Gdx.input.isKeyJustPressed(Input.Keys.R)){startStage();}
             else update(dt);
         }
         if(scene!=Screen.PAUSED) updateCamera(dt);
@@ -162,6 +183,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         uiView.defeated=defeated;uiView.total=totalEnemies;uiView.x=player.x;uiView.y=player.y;
         uiView.attackCd=player.attackCd;uiView.magicCd=player.magicCd;uiView.healCd=player.healCd;
         uiView.dungeon=dungeon;uiView.hasSave=hasSave;uiView.message=message;
+        uiView.level=dungeon.level;uiView.introRemaining=introRemaining;
         uiView.mode=mode;uiView.savedMode=savedMode;
         uiView.attacks=attacks;uiView.hits=hits;uiView.heartsCollected=heartsCollected;
         uiView.pressure=0;uiView.pressureAccuracy=0;uiView.pressureSeconds=0;
@@ -170,16 +192,18 @@ public final class MotionboundGame extends ApplicationAdapter {
             uiView.pressureSeconds=simulated.sensors.pressureSeconds;
         }
         switch(ui.draw(scene,uiView)) {
-            case NEW_GAME -> {resetWorld();message="";scene=Screen.PLAYING;}
-            case RESUME -> {controls.reset();scene=Screen.PLAYING;}
-            case PAUSE -> {controls.reset();scene=Screen.PAUSED;}
+            case NEW_GAME -> newCampaign();
+            case RETRY_STAGE -> startStage();
+            case NEXT_STAGE -> nextStage();
+            case RESUME -> {controls.reset();scene=resumeScene;}
+            case PAUSE -> pauseExpedition();
             case LOAD -> loadGame();
             case SAVE_EXIT -> saveAndExit();
             case FULLSCREEN -> toggleFullscreen();
             case CONVENTIONAL -> {setMode(GameMode.CONVENTIONAL);message="";scene=Screen.MENU;}
             case REHABILITATION -> {setMode(GameMode.REHABILITATION);message="";scene=Screen.REHAB_SETUP;}
             case MODE_SELECT -> {message="";scene=Screen.MODE_SELECT;}
-            case START_SIMULATION -> {setMode(GameMode.REHABILITATION);resetWorld();message="";scene=Screen.PLAYING;}
+            case START_SIMULATION -> {setMode(GameMode.REHABILITATION);newCampaign();}
             default -> { }
         }
     }
@@ -226,7 +250,9 @@ public final class MotionboundGame extends ApplicationAdapter {
             Spark p=sparks.get(i);p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
             if(p.life<=0)sparks.removeIndex(i);
         }
-        if(defeated==totalEnemies && Vector2.dst2(player.x,player.y,47*TILE+8,27*TILE+8)<(18*18))scene=Screen.VICTORY;
+        if(defeated==totalEnemies && Vector2.dst2(player.x,player.y,dungeon.exitX(),dungeon.exitY())<(18*18)) {
+            stageComplete=true;controls.reset();scene=dungeon.level.last()?Screen.VICTORY:Screen.LEVEL_COMPLETE;resumeScene=scene;
+        }
         if(player.hp<=0)scene=Screen.DEFEAT;
     }
     private void updateEnemies(float dt) {
@@ -368,28 +394,38 @@ public final class MotionboundGame extends ApplicationAdapter {
     }
     private void drawMap() {
         batch.setProjectionMatrix(worldCamera.combined);batch.begin();
-        int minX=Math.max(0,MathUtils.floor((worldCamera.position.x-VIEW_W/2f)/TILE)-2);
-        int maxX=Math.min(DungeonMap.WIDTH-1,MathUtils.floor((worldCamera.position.x+VIEW_W/2f)/TILE)+2);
-        int minY=Math.max(0,MathUtils.floor((worldCamera.position.y-VIEW_H/2f)/TILE)-2);
-        int maxY=Math.min(DungeonMap.HEIGHT-1,MathUtils.floor((worldCamera.position.y+VIEW_H/2f)/TILE)+2);
+        int minX=Math.max(0,MathUtils.floor((worldCamera.position.x-VIEW_W*worldCamera.zoom/2f)/TILE)-2);
+        int maxX=Math.min(DungeonMap.WIDTH-1,MathUtils.floor((worldCamera.position.x+VIEW_W*worldCamera.zoom/2f)/TILE)+2);
+        int minY=Math.max(0,MathUtils.floor((worldCamera.position.y-VIEW_H*worldCamera.zoom/2f)/TILE)-2);
+        int maxY=Math.min(DungeonMap.HEIGHT-1,MathUtils.floor((worldCamera.position.y+VIEW_H*worldCamera.zoom/2f)/TILE)+2);
         for(int x=minX;x<=maxX;x++) for(int y=minY;y<=maxY;y++) {
             boolean floor=dungeon.isFloor(x,y);
             int tile=floor?dungeon.floorTile(x,y):dungeon.wallTile(x,y);
-            if(floor) batch.setColor(dungeon.overgrown(x,y)?.78f:.91f,dungeon.overgrown(x,y)?.85f:.84f,.87f,1);
+            if(dungeon.outdoors()) {
+                if(floor)batch.setColor(Color.WHITE);
+                else if(dungeon.level.theme()==CampaignLevel.Theme.SNOW)batch.setColor(.60f,.73f,.86f,1);
+                else batch.setColor(.61f,.72f,.62f,1);
+            }
+            else if(floor) batch.setColor(dungeon.overgrown(x,y)?.78f:.91f,dungeon.overgrown(x,y)?.85f:.84f,.87f,1);
             else batch.setColor(.78f,.79f,.88f,1);
-            batch.draw(art.tile(tile),x*TILE,y*TILE,TILE,TILE);
+            batch.draw(art.prop(tile),x*TILE,y*TILE,TILE,TILE);
             if(floor && dungeon.detailAt(x,y)>=0) {
                 batch.setColor(1,1,1,.85f);batch.draw(art.detail(dungeon.detailAt(x,y)),x*TILE,y*TILE,TILE,TILE);
             }
-            int prop=dungeon.propAt(x,y);
-            if(prop!=0) {batch.setColor(Color.WHITE);batch.draw(art.prop(prop),x*TILE,y*TILE,TILE,TILE);}
+        }
+        // Draw scenery after the ground, north to south, so taller village trees aren't cut by grass.
+        batch.setColor(Color.WHITE);
+        for(int y=maxY;y>=minY;y--)for(int x=minX;x<=maxX;x++) {
+            int prop=dungeon.propAt(x,y);if(prop==0)continue;
+            float size=dungeon.level.theme()==CampaignLevel.Theme.VILLAGE&&(prop==DungeonMap.TOWN+28||prop==DungeonMap.TOWN+5)?32:TILE;
+            batch.draw(art.prop(prop),x*TILE+(TILE-size)/2,y*TILE,size,size);
         }
         batch.setColor(Color.WHITE);
         batch.end();
     }
     private void drawEntities() {
         batch.setProjectionMatrix(worldCamera.combined);batch.begin();
-        float portalX=47*TILE+8,portalY=27*TILE+8;
+        float portalX=dungeon.exitX(),portalY=dungeon.exitY();
         boolean ready=defeated==totalEnemies;
         batch.setColor(ready?new Color(.6f,1f,.85f,1f):new Color(.48f,.50f,.58f,1f));
         float bob=ready?MathUtils.sin(uiTime*3f):0;
@@ -465,7 +501,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA,GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        float portalX=47*TILE+8,portalY=27*TILE+8;
+        float portalX=dungeon.exitX(),portalY=dungeon.exitY();
         shapes.setColor(defeated==totalEnemies ? new Color(.25f,.98f,.75f,.3f) : new Color(.5f,.5f,.6f,.15f));
         shapes.rect(portalX-12,portalY-10,24,20);
         shapes.rect(portalX-10,portalY-12,20,24);
@@ -499,7 +535,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         if(scene==Screen.PLAYING) {
             Vector2 direction=swing.active()?swing.direction:aim;
             shapes.setColor(mode==GameMode.CONVENTIONAL?GOLD:GREEN);
-            float tx=player.x+direction.x*22,ty=player.y+direction.y*22;
+            float tx=player.x+direction.x*(CombatRules.REACH-6),ty=player.y+direction.y*(CombatRules.REACH-6);
             shapes.rect(Math.round(tx),Math.round(ty),2,2);
             if(cursorVisible&&mode==GameMode.CONVENTIONAL) {
                 float cx=Math.round(cursorWorld.x),cy=Math.round(cursorWorld.y);
@@ -529,16 +565,16 @@ public final class MotionboundGame extends ApplicationAdapter {
         batch.setProjectionMatrix(worldCamera.combined);
         batch.setBlendFunction(GL20.GL_SRC_ALPHA,GL20.GL_ONE);
         batch.begin();
-        for(int[] torch:DungeonMap.TORCHES) {
+        for(int[] torch:dungeon.torches) {
             float x=torch[0]*TILE+8,y=torch[1]*TILE+7;
             float radius=34+MathUtils.sin(uiTime*5.1f+x)*2+MathUtils.sin(uiTime*9.7f+y);
-            if(torch[2]==0)batch.setColor(1,.52f,.20f,.70f);
+            if(torch[2]==0)batch.setColor(1,.52f,.20f,dungeon.outdoors()?.30f:.70f);
             else batch.setColor(.28f,.85f,.70f,.65f);
             batch.draw(art.glow,x-radius,y-radius,radius*2,radius*2);
         }
         if(defeated==totalEnemies) {
             batch.setColor(.40f,.95f,.70f,.6f);
-            batch.draw(art.glow,47*TILE-28,27*TILE-28,72,72);
+            batch.draw(art.glow,dungeon.exitX()-36,dungeon.exitY()-36,72,72);
         }
         batch.setColor(Color.WHITE);batch.end();
         batch.setBlendFunction(GL20.GL_SRC_ALPHA,GL20.GL_ONE_MINUS_SRC_ALPHA);
@@ -546,12 +582,20 @@ public final class MotionboundGame extends ApplicationAdapter {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         Gdx.gl.glBlendFunc(GL20.GL_SRC_ALPHA,GL20.GL_ONE_MINUS_SRC_ALPHA);
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        for(int[] torch:DungeonMap.TORCHES) {
+        for(int[] torch:dungeon.torches) {
             float x=torch[0]*TILE+8,y=torch[1]*TILE+7;
             float cycle=(uiTime*.6f+torch[0]*.13f)%1;
             shapes.setColor(torch[2]==0?GOLD:GREEN);
             shapes.rect((float)Math.floor(x+MathUtils.sin(uiTime*2+x)*2),
                     (float)Math.floor(y+cycle*12),1,1);
+        }
+        if(dungeon.level.theme()==CampaignLevel.Theme.SNOW) {
+            shapes.setColor(.90f,.96f,1,.6f);
+            for(int i=0;i<90;i++) {
+                float x=(i*97+MathUtils.sin(uiTime+i)*5)%880;
+                float y=(i*67-uiTime*12)%560;if(y<0)y+=560;
+                shapes.rect((int)x,(int)y,1,1);
+            }
         }
         for(int i=0;i<30;i++) {
             float x=64+(i*97)%750+MathUtils.sin(uiTime*.4f+i)*4;
@@ -568,6 +612,7 @@ public final class MotionboundGame extends ApplicationAdapter {
     }
     private SaveData captureSave() {
         SaveData data=new SaveData();
+        data.stage=stage;data.introRemaining=introRemaining;data.stageComplete=stageComplete;
         data.x=player.x;data.y=player.y;data.hp=player.hp;data.heals=player.heals;
         data.facing=player.facing;data.stamina=player.stamina;data.mana=player.mana;
         data.elapsed=elapsed;data.defeated=defeated;data.hitInvuln=player.hitInvuln;
@@ -608,7 +653,9 @@ public final class MotionboundGame extends ApplicationAdapter {
         try {
             SaveData data=SaveData.read(saveFile);
             setMode(data.mode);
+            stage=data.stage;
             resetWorld();
+            introRemaining=data.introRemaining;stageComplete=data.stageComplete;
             player.x=data.x;player.y=data.y;player.hp=data.hp;player.heals=data.heals;
             player.facing=data.facing;player.stamina=data.stamina;player.mana=data.mana;
             player.hitInvuln=data.hitInvuln;player.attackCd=data.attackCd;
@@ -631,7 +678,9 @@ public final class MotionboundGame extends ApplicationAdapter {
             }
             for(SaveData.HeartData saved:data.hearts)hearts.add(new HeartDrop(saved.x,saved.y));
             worldCamera.position.set(player.x,player.y,0);updateCamera(1);
-            controls.reset();message="";scene=Screen.PLAYING;
+            controls.reset();message="";
+            scene=stageComplete?(dungeon.level.last()?Screen.VICTORY:Screen.LEVEL_COMPLETE):introRemaining>0?Screen.LEVEL_INTRO:Screen.PLAYING;
+            resumeScene=scene;
         } catch(RuntimeException e) {
             hasSave=false;
             message="O save não pôde ser lido. Você pode iniciar uma nova aventura.";
@@ -639,7 +688,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         }
     }
     @Override public void pause() {
-        if(scene==Screen.PLAYING) {scene=Screen.PAUSED;controls.reset();}
+        if(scene==Screen.PLAYING||scene==Screen.LEVEL_INTRO||scene==Screen.LEVEL_COMPLETE)pauseExpedition();
     }
     @Override public void resize(int width,int height) {
         if(width<=0||height<=0)return;

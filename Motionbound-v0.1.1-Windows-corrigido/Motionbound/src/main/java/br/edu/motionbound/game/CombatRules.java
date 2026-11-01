@@ -4,7 +4,7 @@ import com.badlogic.gdx.math.Vector2;
 
 /** Geometry shared by mouse and assisted sensor input, independent of the rendered sprite. */
 public final class CombatRules {
-    public static final float REACH=28, HALF_ARC_DEGREES=60;
+    public static final float REACH=28*1.15f, HALF_ARC_DEGREES=60;
     public static final int MAGIC_DAMAGE=1;
     public static final float MAGIC_KNOCKBACK=240;
     private static final float MIN_DOT=(float)Math.cos(Math.toRadians(HALF_ARC_DEGREES));

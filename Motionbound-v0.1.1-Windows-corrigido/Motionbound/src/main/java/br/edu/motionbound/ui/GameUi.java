@@ -4,6 +4,7 @@ import br.edu.motionbound.game.DungeonMap;
 import br.edu.motionbound.game.GameAssets;
 import br.edu.motionbound.input.GameMode;
 import br.edu.motionbound.game.MeleeSwing;
+import br.edu.motionbound.game.CampaignLevel;
 import br.edu.motionbound.ui.UiIcons.Icon;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -19,9 +20,9 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport;
 
 /** Pixel dungeon interface: carved stone, bronze fittings and parchment field notes. */
 public final class GameUi implements Disposable {
-    public enum Screen { MODE_SELECT, REHAB_SETUP, MENU, PLAYING, PAUSED, DEFEAT, VICTORY }
+    public enum Screen { MODE_SELECT, REHAB_SETUP, MENU, LEVEL_INTRO, PLAYING, PAUSED, LEVEL_COMPLETE, DEFEAT, VICTORY }
     public enum Action { NONE, RESUME, NEW_GAME, LOAD, SAVE_EXIT, FULLSCREEN, PAUSE,
-        CONVENTIONAL, REHABILITATION, MODE_SELECT, START_SIMULATION }
+        CONVENTIONAL, REHABILITATION, MODE_SELECT, START_SIMULATION, NEXT_STAGE, RETRY_STAGE }
     private enum Page { SUMMARY, SETTINGS, TUTORIAL }
     public static final class View {
         public int hp, maxHp, heals, defeated, total;
@@ -32,6 +33,8 @@ public final class GameUi implements Disposable {
         public float pressure,pressureAccuracy,pressureSeconds;
         public String message = "";
         public DungeonMap dungeon;
+        public CampaignLevel level=CampaignLevel.of(1);
+        public float introRemaining;
     }
 
     private static final Color INK = Color.valueOf("17141e");
@@ -107,7 +110,7 @@ public final class GameUi implements Disposable {
         panel(x,y,1040,550);
         center(display,"MOTIONBOUND",width/2,y+506,WHITE);
         center(heading,"Escolha sua jornada",width/2,y+414,GOLD);
-        center(small,"Duas formas de explorar a mesma cripta.",width/2,y+367,MUTED);
+        center(small,"Cinco fases. Duas formas de viver a aventura.",width/2,y+367,MUTED);
         parchment(x+28,y+144,476,194);
         parchment(x+536,y+144,476,194);
         item(103,x+45,y+278,42);
@@ -151,7 +154,7 @@ public final class GameUi implements Disposable {
         if (screen != previous) { focus = 0; page = Page.SUMMARY; previous = screen; }
         int count = screen == Screen.PAUSED ? 5 : screen == Screen.MENU ? (canContinue(view) ? 4 : 3)
                 : screen == Screen.MODE_SELECT ? 3 : screen == Screen.REHAB_SETUP ? (canContinue(view)?3:2)
-                : screen == Screen.PLAYING ? 1 : 2;
+                : screen == Screen.PLAYING || screen==Screen.LEVEL_INTRO ? 1 : 2;
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) focus = (focus + 1) % count;
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) focus = (focus + count - 1) % count;
         pointer.set(Gdx.input.getX(), Gdx.input.getY()); viewport.unproject(pointer);
@@ -160,6 +163,7 @@ public final class GameUi implements Disposable {
         Gdx.gl.glEnable(GL20.GL_BLEND);
         batch.begin();
         if (screen == Screen.PLAYING) hud(view);
+        else if(screen==Screen.LEVEL_INTRO) {levelIntro(view);}
         else {
             rect(0, 0, width, height, INK, .86f);
             for (int i = 0; i < 5; i++) {
@@ -174,6 +178,36 @@ public final class GameUi implements Disposable {
         }
         batch.end();
         return action;
+    }
+
+    private void campaignTrail(CampaignLevel level,float y) {
+        float left=width/2-142;
+        for(int i=1;i<=CampaignLevel.COUNT;i++) {
+            float x=left+(i-1)*64;
+            if(i<CampaignLevel.COUNT)rect(x+22,y+10,42,2,i<level.number()?MINT:LINE);
+            socket(x,y,28);
+            if(i==level.number())rect(x+3,y+3,22,22,GOLD);
+            center(body,""+i,x+14,y+24,i<level.number()?MINT:i==level.number()?INK:MUTED);
+        }
+    }
+    private void levelIntro(View view) {
+        rect(0,0,width,height,INK,.65f);
+        float x=(width-1000)/2,y=(height-440)/2;
+        panel(x,y,1000,440);
+        center(small,"NOVA ETAPA DA JORNADA",width/2,y+403,GOLD);
+        center(heading,"Fase "+view.level.number()+" - Nível "+view.level.difficulty().toLowerCase(java.util.Locale.ROOT),width/2,y+356,WHITE);
+        center(body,view.level.title(),width/2,y+296,GOLD);
+        ornament(x+170,y+257,660,LINE);
+        if(view.introRemaining>3)center(heading,"PREPARE-SE",width/2,y+217,MUTED);
+        else {
+            int digit=MathUtils.clamp((int)Math.ceil(view.introRemaining),1,3);
+            batch.setColor(Color.WHITE);batch.draw(art.countdownDigit(digit),width/2-64,y+122,128,128);
+        }
+        center(small,"Derrote "+view.total+" guardiões e encontre o baú marcado no mapa.",width/2,y+103,MUTED);
+        campaignTrail(view.level,y+45);
+        if(view.mode==GameMode.REHABILITATION)
+            center(small,"SIMULAÇÃO / dados artificiais / IJKL: inclinar / F: apertar",width/2,y-22,BLUE);
+        if(button(width-181,28,153,44,"ESC  Menu",false,false))action=Action.PAUSE;
     }
 
     private void hud(View v) {
@@ -201,14 +235,14 @@ public final class GameUi implements Disposable {
 
         float mx = width - 248;
         panel(mx, top - 214, 220, 214);
-        label(small, "MAPA DA CRIPTA", mx + 19, top - 13, GOLD);
+        label(small, "MAPA / FASE "+v.level.number(), mx + 19, top - 13, GOLD);
         float scale = 2.9f, x0 = mx + 30, y0 = top - 140;
         rect(x0 - 5, y0 - 5, 170, 112, PAPER_MUTED);
         rect(x0 - 2, y0 - 2, 164, 106, PAPER);
         for (int x = 0; x < DungeonMap.WIDTH; x++) for (int y = 0; y < DungeonMap.HEIGHT; y++) {
             if (v.dungeon.isFloor(x, y)) rect(x0 + x * scale, y0 + y * scale, scale, scale, PAPER_MUTED);
         }
-        rect(x0 + 47 * scale - 2, y0 + 27 * scale - 2, 6, 6, v.defeated == v.total ? MINT : RED);
+        rect(x0 + v.dungeon.exitTileX * scale - 2, y0 + v.dungeon.exitTileY * scale - 2, 6, 6, v.defeated == v.total ? MINT : RED);
         rect(x0 + v.x / 16 * scale - 2, y0 + v.y / 16 * scale - 2, 5, 5, INK);
         label(small, "VOCÊ", mx + 20, top - 154, WHITE);
         right(small, "SAÍDA", mx + 200, top - 154, GOLD);
@@ -219,15 +253,15 @@ public final class GameUi implements Disposable {
         float cx = width / 2;
         parchment(cx - 242, height - 103, 484, 75);
         icons.draw(batch, Icon.SCROLL, cx - 230, height - 86, 42);
-        label(small, v.defeated == v.total ? "PASSAGEM LIBERADA" : "MISSÃO DA CRIPTA", cx - 178, height - 42, PAPER_MUTED);
-        label(body, v.defeated == v.total ? "Encontre o baú da saída" : "Derrote os 7 guardiões", cx - 178, height - 65, PAPER_TEXT);
+        label(small, "FASE "+v.level.number()+" / "+CampaignLevel.COUNT+" - "+v.level.title(), cx - 178, height - 42, PAPER_MUTED);
+        label(body, v.defeated == v.total ? "Encontre o baú da saída" : "Derrote os "+v.total+" guardiões", cx - 178, height - 65, PAPER_TEXT);
 
         float start = cx - 308;
         boolean demo=v.mode==GameMode.REHABILITATION;
         skill(start, 28, demo?"F (DEMO)":"MOUSE ESQ.", "Espada", v.attackCd, MeleeSwing.COOLDOWN, GOLD, demo?"Mira assistida":"Mira em 360 graus");
         skill(start + 208, 28, demo?"EM BREVE":"MOUSE DIR.", "Magia", v.magicCd, .75f, BLUE, demo?"Etapa seguinte":"25 de mana");
         skill(start + 416, 28, demo?"COLETA":"ESPAÇO", "Cura", v.healCd, 1.7f, MINT, demo?"Coração: +1":v.heals + " poções");
-        label(small, demo?"DADOS SIMULADOS":"EXPEDIÇÃO 01", 28, 66, demo?BLUE:GOLD);
+        label(small, demo?"DEMO / FASE "+v.level.number():"FASE "+v.level.number()+" / "+CampaignLevel.COUNT, 28, 66, demo?BLUE:GOLD);
         label(body, time(v.elapsed), 28, 46, WHITE);
         if(demo) {
             panel(width/2-308,121,616,51);
@@ -258,7 +292,7 @@ public final class GameUi implements Disposable {
         label(small, "MOTIONBOUND", x + 32, y + 522, GOLD);
         icons.draw(batch, Icon.PAUSE, x + 308, y + 504, 24);
         label(small, "UM RESPIRO NA JORNADA", x + 340, y + 522, MINT);
-        right(small, "A CRIPTA ESQUECIDA", x + 1028, y + 522, MUTED);
+        right(small, "FASE "+v.level.number()+" / "+CampaignLevel.COUNT+" - "+v.level.title(), x + 1028, y + 522, MUTED);
         rect(x + 294, y + 30, 4, 450, INK);
         rect(x + 298, y + 30, 2, 450, GOLD);
         socket(x + 116, y + 430, 64);
@@ -291,7 +325,8 @@ public final class GameUi implements Disposable {
         icons.draw(batch, Icon.SCROLL, x + 12, y + 186, 48);
         label(small, v.defeated == v.total ? "O CAMINHO ESTÁ LIVRE" : "JURAMENTO DO EXPLORADOR", x + 76, y + 236, PAPER_MUTED);
         label(body, v.defeated == v.total ? "Encontre o baú ao nordeste." : "Derrote os " + (v.total - v.defeated) + " guardiões restantes.", x + 76, y + 208, PAPER_TEXT);
-        for (int i = 0; i < v.total; i++) icons.fill(batch, Icon.SKULL, x + 78 + i * 36, y + 153, 28, i < v.defeated ? 1 : 0);
+        float spacing=Math.min(36,560f/v.total);
+        for (int i = 0; i < v.total; i++) icons.fill(batch, Icon.SKULL, x + 78 + i * spacing, y + 153, Math.min(28,spacing-3), i < v.defeated ? 1 : 0);
         label(small, "VIDA " + v.hp + "/" + v.maxHp + "    VIGOR " + Math.round(v.stamina) + "%    MANA " + Math.round(v.mana) + "%", x + 20, y + 119, PAPER_TEXT);
         String accuracy=v.attacks==0?"--":Math.round(100f*v.hits/v.attacks)+"%";
         label(small, "GOLPES "+v.attacks+"   ACERTOS "+accuracy+"   CORAÇÕES "+v.heartsCollected, x + 20, y + 90, PAPER_MUTED);
@@ -350,7 +385,7 @@ public final class GameUi implements Disposable {
         tutorialCard(x + 354, y + 190, "MOUSE DIREITO", "Magia", "Dano leve e recuo; custa 25 de mana.", BLUE);
         tutorialCard(x, y + 94, "ESPAÇO", "Curar", "Poção +2; inimigos: 30% de coração.", MINT);
         tutorialCard(x + 354, y + 94, "ESC / F11", "Pausa / Tela cheia", "R reinicia a fase durante a aventura.", MUTED);
-        label(small, "MISSÃO: vença os 7 guardiões e alcance o baú ao nordeste.", x + 16, y + 86, PAPER_TEXT);
+        label(small, "Cinco fases: vença os guardiões e alcance o baú em cada mapa.", x + 16, y + 86, PAPER_TEXT);
     }
 
     private void tutorialCard(float x, float y, String key, String title, String detail, Color color) {
@@ -369,8 +404,8 @@ public final class GameUi implements Disposable {
         center(small, "CRÔNICAS DE UM MUNDO ESQUECIDO", width / 2, y + 511, GOLD);
         center(display, "MOTIONBOUND", width / 2 + 3, y + 452, PAPER_TEXT);
         center(display, "MOTIONBOUND", width / 2, y + 456, WHITE);
-        center(body, "A CRIPTA ESQUECIDA", width / 2, y + 366, GOLD);
-        center(small, "Explore os corredores. Enfrente os guardiões. Encontre a saída.", width / 2, y + 318, MUTED);
+        center(body, "CINCO ETAPAS ATÉ O CREPÚSCULO", width / 2, y + 366, GOLD);
+        center(small, "Cripta / Vila / Fazenda / Neve / Fortaleza", width / 2, y + 318, MUTED);
         ornament(x + 110, y + 282, 700, GOLD);
         float by = y + 216;
         if (canContinue(v)) {
@@ -386,18 +421,24 @@ public final class GameUi implements Disposable {
 
     private void result(Screen screen, View v) {
         boolean won = screen == Screen.VICTORY;
+        boolean completed=screen==Screen.LEVEL_COMPLETE;
         float x = (width - 840) / 2, y = (height - 490) / 2;
         panel(x, y, 840, 490);
-        rect(x, y + 487, 840, 3, won ? MINT : RED);
-        center(small, won ? "EXPEDIÇÃO CONCLUÍDA" : "FIM DA EXPEDIÇÃO", width / 2, y + 446, won ? MINT : RED);
-        center(heading, won ? "A cripta foi libertada." : "Sua jornada ainda continua.", width / 2, y + 398, WHITE);
-        center(small, won ? "Todos os guardiões caíram. Você encontrou a saída." : "Recupere o fôlego e tente uma nova estratégia.", width / 2, y + 338, MUTED);
+        rect(x, y + 487, 840, 3, won||completed ? MINT : RED);
+        center(small, won ? "CAMPANHA CONCLUÍDA / 5 DE 5" : completed?"FASE "+v.level.number()+" CONCLUÍDA":"FASE "+v.level.number()+" / NOVA TENTATIVA", width / 2, y + 446, won||completed ? MINT : RED);
+        center(heading, won ? "O crepúsculo foi vencido." : completed?"Mais um caminho foi aberto.":"Sua jornada ainda continua.", width / 2, y + 398, WHITE);
+        center(small, completed?"A seguir: "+CampaignLevel.of(v.level.number()+1).title():won?"Você atravessou as cinco fases da jornada.":"Recupere o fôlego e tente uma nova estratégia.", width / 2, y + 338, MUTED);
         stat(x + 185, y + 185, "GUARDIÕES", v.defeated + " / " + v.total, MINT);
         stat(x + 435, y + 185, "TEMPO ATIVO", time(v.elapsed), GOLD);
         if(v.mode==GameMode.REHABILITATION)
             center(small,"SIMULAÇÃO / pressão na faixa: "+Math.round(v.pressureAccuracy)+"% / dados artificiais",width/2,y+186,BLUE);
-        if (button(width / 2 - 205, y + 99, 410, 54, "Jogar novamente", true, false)) action = Action.NEW_GAME;
-        if (button(width / 2 - 205, y + 40, 410, 44, "Sair do jogo", false, true)) Gdx.app.exit();
+        else if(completed)center(small,"Descanse: vida, mana e poções renovadas na próxima fase.",width/2,y+186,MUTED);
+        if (button(width / 2 - 205, y + 99, 410, 54, completed?"Seguir para a fase "+(v.level.number()+1):won?"Nova campanha":"Tentar esta fase", true, false))
+            action=completed?Action.NEXT_STAGE:won?Action.NEW_GAME:Action.RETRY_STAGE;
+        if (button(width / 2 - 205, y + 40, 410, 44, completed?"Salvar e sair":"Sair do jogo", false, true)) {
+            if(completed)action=Action.SAVE_EXIT;else Gdx.app.exit();
+        }
+        if(!v.message.isEmpty())center(small,v.message,width/2,y-22,RED);
     }
 
     private boolean button(float x, float y, float w, float h, String text, boolean active, boolean danger) {
@@ -421,7 +462,7 @@ public final class GameUi implements Disposable {
         // Only the visible, focused action receives keyboard activation.
         return (hover && Gdx.input.isButtonJustPressed(Input.Buttons.LEFT))
                 || (selected && (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)
-                || (previous != Screen.PLAYING && Gdx.input.isKeyJustPressed(Input.Keys.SPACE))));
+                || (previous != Screen.PLAYING && previous!=Screen.LEVEL_INTRO && Gdx.input.isKeyJustPressed(Input.Keys.SPACE))));
     }
 
     private void panel(float x, float y, float w, float h) {

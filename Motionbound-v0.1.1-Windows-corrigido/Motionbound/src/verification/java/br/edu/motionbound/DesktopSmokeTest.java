@@ -2,6 +2,8 @@ package br.edu.motionbound;
 
 import br.edu.motionbound.game.SaveData;
 import br.edu.motionbound.game.MeleeSwing;
+import br.edu.motionbound.game.CampaignLevel;
+import br.edu.motionbound.game.DungeonMap;
 import br.edu.motionbound.input.GameMode;
 import br.edu.motionbound.ui.GameUi.Screen;
 import br.edu.motionbound.ui.GameUi;
@@ -47,7 +49,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         DesktopSmokeTest test = new DesktopSmokeTest(Path.of(args[0]));
         new Lwjgl3Application(test, DesktopLauncher.configuration());
         if (test.failure != null) throw new AssertionError("Desktop verification failed", test.failure);
-        System.out.println("PASS: fullscreen, HUD, pause, resize, diagonal combat, animation timing, heart pickup, sensor simulation and save/continue");
+        System.out.println("PASS: fullscreen, HUD, combat, knockback, five-stage campaign, countdown, retry, both control modes and save/continue");
     }
 
     @Override public void create() {
@@ -81,6 +83,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                 case 5 -> { require(Gdx.graphics.isFullscreen(), "Fullscreen by default"); }
                 case 6 -> key=Input.Keys.ENTER;
                 case 8 -> key = Input.Keys.ENTER;
+                case 9 -> verifyIntro();
                 case 12 -> key = Input.Keys.ESCAPE;
                 case 14 -> { require(scene() == Screen.PAUSED, "ESC pauses"); pausedTime = (float)get(game, "elapsed"); }
                 case 20 -> { require((float)get(game, "elapsed") == pausedTime, "Time frozen in pause"); }
@@ -151,6 +154,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                     roomScreenshot("14-overgrown-chapel", 232, 400);
                     roomScreenshot("15-reliquary", 672, 400);
                     verifyCombatFlow();
+                    verifyCampaignFlow();
                 }
                 default -> { }
             }
@@ -249,7 +253,8 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             require(scene()==Screen.REHAB_SETUP,"Rehabilitation mode has its own preparation screen");
             screenshot("21-rehabilitation-preparation");
             key=Input.Keys.ENTER;game.render();key=-1;
-            require(scene()==Screen.PLAYING&&get(game,"mode")==GameMode.REHABILITATION,"Explicit simulator entry");
+            require(scene()==Screen.LEVEL_INTRO&&get(game,"mode")==GameMode.REHABILITATION,"Explicit simulator entry starts the same campaign");
+            advanceIntro(CampaignLevel.INTRO_SECONDS);
             enemies=(Array<?>)get(game,"enemies");
             for(Object enemy:enemies){set(enemy,"x",600f);set(enemy,"y",400f);set(enemy,"speed",0f);}
             step(.02f);held.add(Input.Keys.F);step(.02f);
@@ -272,10 +277,111 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                     &&simulation.pressureInBandSeconds<simulation.pressureSeconds,"Simulation and synthetic metrics remain labelled in saves");
             key=Input.Keys.ESCAPE;game.render();key=-1;game.render();screenshot("23-sensor-simulation-summary");
             set(game,"scene",Screen.DEFEAT);game.render();screenshot("24-sensor-simulation-result");
+            // Both modes use the same campaign transitions, without changing sensor thresholds.
+            set(game,"scene",Screen.PLAYING);
+            for(Object enemy:enemies)set(enemy,"hp",0);
+            call(game,"resolveDeaths");
+            DungeonMap map=(DungeonMap)get(game,"dungeon");set(player,"x",map.exitX());set(player,"y",map.exitY());step(.02f);
+            call(game,"nextStage");
+            require((int)get(game,"stage")==2&&scene()==Screen.LEVEL_INTRO&&get(game,"mode")==GameMode.REHABILITATION,
+                    "Rehabilitation mode survives stage progression");
         } finally {
             held.clear();key=-1;click=false;mouseButton=Input.Buttons.LEFT;
             set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previousFile);set(game,"scene",Screen.PAUSED);
         }
+    }
+    private void advanceIntro(float delta) {
+        try {Method method=game.getClass().getDeclaredMethod("updateIntro",float.class);method.setAccessible(true);method.invoke(game,delta);}
+        catch(ReflectiveOperationException e){throw new AssertionError(e);}
+    }
+    private void verifyIntro() {
+        require(scene()==Screen.LEVEL_INTRO,"New campaign starts with a level introduction");
+        Object player=get(game,"player");Object enemy=((Array<?>)get(game,"enemies")).first();
+        float x=(float)get(player,"x"),enemyX=(float)get(enemy,"x");
+        key=Input.Keys.SPACE;held.add(Input.Keys.D);click=true;pointAt(x+40,(float)get(player,"y"));
+        game.render();screenshot("27-phase-1-introduction");
+        require(scene()==Screen.LEVEL_INTRO&&(float)get(player,"x")==x&&(float)get(enemy,"x")==enemyX
+                &&(int)get(game,"attacks")==0&&(float)get(game,"elapsed")==0,"Countdown freezes movement, combat and active time");
+        held.clear();click=false;key=-1;
+        advanceIntro(1.3f);game.render();screenshot("28-countdown-3");
+        advanceIntro(1f);game.render();screenshot("29-countdown-2");
+        advanceIntro(1f);game.render();screenshot("30-countdown-1");
+        require(scene()==Screen.LEVEL_INTRO&&(float)get(game,"elapsed")==0,"All countdown digits precede gameplay");
+        advanceIntro(1f);require(scene()==Screen.PLAYING,"Countdown starts gameplay automatically");
+    }
+    private void verifyCampaignFlow() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-campaign-check.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            key=-1;click=false;held.clear();call(game,"newCampaign");
+            for(int stage=1;stage<=CampaignLevel.COUNT;stage++) {
+                require((int)get(game,"stage")==stage&&scene()==Screen.LEVEL_INTRO,"Sequential stage entry: "+stage);
+                if(stage==2) {
+                    advanceIntro(1.4f);
+                    FileHandle introFile=output.child("stage-2-intro-check.json");
+                    float remaining=(float)get(game,"introRemaining");
+                    ((SaveData)call(game,"captureSave")).write(introFile);
+                    set(game,"saveFile",introFile);call(game,"loadGame");
+                    require(scene()==Screen.LEVEL_INTRO&&(float)get(game,"introRemaining")==remaining,"Loading resumes the saved countdown");
+                    key=Input.Keys.ESCAPE;game.render();key=-1;
+                    float frozen=(float)get(game,"introRemaining");game.render();
+                    require(scene()==Screen.PAUSED&&(float)get(game,"introRemaining")==frozen,"Pause freezes countdown");
+                    key=Input.Keys.ESCAPE;game.render();key=-1;
+                    require(scene()==Screen.LEVEL_INTRO,"Resume returns to the countdown");
+                }
+                advanceIntro(CampaignLevel.INTRO_SECONDS);game.render();
+                Object player=get(game,"player");Array<?> enemies=(Array<?>)get(game,"enemies");
+                DungeonMap map=(DungeonMap)get(game,"dungeon");
+                require(enemies.size==map.level.enemyCount()&&(int)get(player,"hp")==6&&(int)get(player,"heals")==3,
+                        "Stage encounters and replenishment: "+stage);
+                levelOverviewScreenshot("stage-"+stage+"-map");
+                screenshotAfterRender("stage-"+stage+"-hud");
+                if(stage==5) {
+                    key=Input.Keys.ESCAPE;game.render();key=-1;game.render();screenshot("stage-5-pause-summary");
+                    key=Input.Keys.ESCAPE;game.render();key=-1;
+                    require(scene()==Screen.PLAYING,"Last-stage summary supports all 22 guardians");
+                }
+                if(stage==3) {
+                    set(player,"hp",0);step(.02f);game.render();
+                    require(scene()==Screen.DEFEAT,"Defeat ends the current attempt");
+                    key=Input.Keys.ENTER;game.render();key=-1;
+                    require((int)get(game,"stage")==3&&scene()==Screen.LEVEL_INTRO,"Retry preserves current stage");
+                    advanceIntro(CampaignLevel.INTRO_SECONDS);game.render();
+                    player=get(game,"player");enemies=(Array<?>)get(game,"enemies");
+                }
+                set(player,"x",map.exitX());set(player,"y",map.exitY());step(.02f);
+                require(scene()==Screen.PLAYING,"Exit stays locked while any guardian lives");
+                for(Object enemy:enemies)set(enemy,"hp",0);call(game,"resolveDeaths");step(.02f);
+                require(scene()==(stage<CampaignLevel.COUNT?Screen.LEVEL_COMPLETE:Screen.VICTORY),"Stage/final completion: "+stage);
+                FileHandle checkpoint=output.child("stage-"+stage+"-complete-check.json");
+                ((SaveData)call(game,"captureSave")).write(checkpoint);
+                set(game,"saveFile",checkpoint);call(game,"resetWorld");call(game,"loadGame");
+                require((int)get(game,"stage")==stage&&(boolean)get(game,"stageComplete"),"Completed checkpoint restores this stage");
+                game.render();screenshot("stage-"+stage+"-completed");
+                if(stage<CampaignLevel.COUNT) {
+                    key=Input.Keys.ENTER;game.render();key=-1;
+                    require(scene()==Screen.LEVEL_INTRO,"Continue button starts the next countdown");
+                }
+            }
+            call(game,"nextStage");require((int)get(game,"stage")==5,"Final stage cannot advance beyond campaign");
+            key=Input.Keys.ENTER;game.render();key=-1;
+            require((int)get(game,"stage")==1&&scene()==Screen.LEVEL_INTRO,"Final victory offers a fresh campaign");
+        } finally {
+            held.clear();key=-1;click=false;
+            set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void screenshotAfterRender(String name) {game.render();screenshot(name);}
+    private void levelOverviewScreenshot(String name) {
+        OrthographicCamera camera=(OrthographicCamera)get(game,"worldCamera");
+        float x=camera.position.x,y=camera.position.y,zoom=camera.zoom;
+        try {
+            camera.position.set(DungeonMap.WIDTH*8,DungeonMap.HEIGHT*8,0);camera.zoom=2.7f;camera.update();
+            ((FitViewport)get(game,"viewport")).apply();
+            Gdx.gl.glClearColor(.07f,.06f,.09f,1);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+            for(String method:new String[]{"drawMap","drawGroundShadows","drawEntities","drawWorldEffects","drawAmbientLighting"})call(game,method);
+            screenshot(name);
+        } finally {camera.position.set(x,y,0);camera.zoom=zoom;camera.update();}
     }
     /** Review all hand attachments at a larger scale, using the actual game renderer. */
     private void swordGripScreenshot() {

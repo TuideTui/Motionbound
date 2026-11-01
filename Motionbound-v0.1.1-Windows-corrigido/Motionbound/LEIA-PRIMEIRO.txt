@@ -13,7 +13,23 @@ cd -LiteralPath 'C:\Users\ThurC\OneDrive\Desktop\VSCode\Jogo Projeto Jogos Digit
 O script agora seleciona o JDK 25 existente e fixa a pasta correta do Gradle.
 Se houver erros, envie o terminal completo. Nao execute gradle run na pasta pai.
 
-O pack Kenney pode ser instalado mais tarde com instalar-sprites-kenney.bat.
-Sprites provisórios ja incluidos.
+Arte ja incluida: Kenney Tiny Dungeon, Tiny Town, Tiny Farm, Tiny Ski e fonte Kenney Pixel.
+O jogo abre em tela cheia. F11 alterna para janela.
+
+CAMPANHA: 5 FASES
+1. Cripta: 7 guardioes / facil
+2. Vila: 10 guardioes / moderado
+3. Fazenda: 14 guardioes / intermediario
+4. Neve: 18 guardioes / dificil
+5. Fortaleza: 22 guardioes / muito dificil
+
+Cada fase comeca com uma apresentacao e contagem 3, 2, 1.
+Derrote todos os guardioes e encontre o bau marcado no minimapa.
+Entre fases, escolha seguir ou salvar e sair. A proxima fase repoe os recursos.
+WASD/setas: mover; Shift: correr; mouse esquerdo: espada; direito: magia; Espaco: cura.
+Esc: pausa, tutorial e salvar. R: reiniciar somente a fase atual.
+
+O modo reabilitacao ainda e uma simulacao pelo teclado: IJKL movem e F simula aperto.
+A conexao USB/ESP32 e calibracao real aguardam a chegada das pecas.
 
 Nenhum commit foi feito: os commits do GitHub continuam sob controle do aluno.

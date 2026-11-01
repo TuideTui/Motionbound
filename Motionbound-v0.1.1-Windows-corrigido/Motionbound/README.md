@@ -6,7 +6,7 @@
 
 O projeto busca explorar a **gamificação de atividades motoras de mão, punho e antebraço**, reunindo uma experiência de jogo com indicadores de execução e evolução dos movimentos. Trata-se de um protótipo educacional, não de uma ferramenta clínica validada.
 
-> **Estado atual: protótipo v0.1.1 para Windows (correção de inicialização).** Já existe uma masmorra de testes com teclado, personagem animado, câmera, colisões, slimes, esqueletos, combate, magia, cura e condições de vitória/derrota. **A integração IoT, a calibração e as seis fases planejadas ainda não foram implementadas.**
+> **Estado atual: campanha de cinco fases para Windows.** Mapas próprios, dificuldade crescente, apresentação e contagem regressiva pixeladas, combate com mira livre, magia com recuo, cura, pausa e salvamento entre fases. A abertura oferece modo convencional e simulação do modo reabilitação. **USB/Serial, firmware e calibração com os sensores físicos ainda não foram implementados.** O nome do JAR continua `Motionbound-0.1.1-all.jar`.
 
 **Interface atualizada:** abertura em tela cheia, fonte Kenney Pixel, vida em corações, vigor com raio e segmentos, mana em cristais, molduras de pedra/bronze e menu `Esc` em pergaminho. A cripta tem quatro ambientes decorados, tochas animadas e detalhes do Tiny Dungeon e Tiny Town já incluídos. **Salvar e sair** e **Continuar expedição** mantêm a partida. Consulte [Interface e salvamento](docs/INTERFACE-E-SALVAMENTO.md) e [Arte e créditos](docs/ASSETS.md).
 
@@ -42,7 +42,7 @@ cd -LiteralPath 'C:\Users\ThurC\OneDrive\Desktop\VSCode\Jogo Projeto Jogos Digit
 
 O script utiliza explicitamente a pasta onde está o arquivo `build.gradle`, independentemente da pasta atual do terminal. Para gerar um JAR com as dependências, use `gerar-executavel.bat` (arquivo esperado: `build/libs/Motionbound-0.1.1-all.jar`).
 
-**Sprites:** os atlas oficiais [Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon) e [Tiny Town](https://kenney.nl/assets/tiny-town), assim como a fonte Kenney Pixel, já estão incluídos sob CC0. O herói agora usa um atlas gerado com IA, normalizado para células de 32×32 pixels: caminhada, preparação, golpe, recuperação, magia e cura em quatro direções. A espada gira livremente conforme a mira. Os arquivos e a especificação da geração estão em [art-source](art-source/hero-actions.prompt.txt); essa arte não pertence ao Kenney. Não há downloads de arte durante o jogo.
+**Sprites:** os packs oficiais [Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon), [Tiny Town](https://kenney.nl/assets/tiny-town), [Tiny Farm](https://kenney.nl/assets/tiny-farm) e [Tiny Ski](https://kenney.nl/assets/tiny-ski), assim como a fonte Kenney Pixel, já estão incluídos sob CC0, com suas licenças em `assets/`. O herói usa um atlas gerado com IA, normalizado para células de 32×32 pixels: caminhada, preparação, golpe, recuperação, magia e cura em quatro direções. A espada acompanha a mão e gira livremente conforme a mira. Os arquivos e a especificação da geração estão em [art-source](art-source/hero-actions.prompt.txt); essa arte não pertence ao Kenney. Não há downloads de arte durante o jogo.
 
 **Se der erro:** envie a mensagem exibida na janela. O arquivo `docs/COMO-INICIAR-WINDOWS.md` inclui soluções para Gradle iniciado na pasta errada, Java 8 no PATH e download de dependências.
 
@@ -66,25 +66,25 @@ A abertura oferece **Modo convencional** e **Modo reabilitação**. O convencion
 | `F11` | Alternar entre tela cheia e janela |
 | `R` | Reiniciar fase durante a partida |
 
-A espada alcança 28 unidades em um arco de 120 graus. A direção é fixada no início do golpe; o impacto acontece após 0,16 s e atinge cada inimigo uma única vez, respeitando paredes. Movimento e mira são independentes. A arma acompanha a mão de cada pose, com o cabo coberto pelos dedos e profundidade conforme a direção do corpo. Os inimigos reagem ao impacto com partículas e recuo.
+A espada alcança **32,2 unidades** em um arco de 120 graus, um aumento de 15% sobre o alcance anterior de 28. A direção é fixada no início do golpe; o impacto acontece após 0,16 s e atinge cada inimigo uma única vez, respeitando paredes. Movimento e mira são independentes. A arma acompanha a mão de cada pose, com o cabo coberto pelos dedos e profundidade conforme a direção do corpo. Os inimigos reagem ao impacto com partículas e recuo.
 
 A magia causa **1 de dano** (antes, 2) e empurra o alvo na direção do projétil. Durante o recuo, o inimigo interrompe a perseguição e o ataque de contato; o deslocamento respeita as paredes. O custo continua sendo 25 de mana.
 
-Cada inimigo derrotado tem **30% de chance de deixar um coração no chão**. A coleta recupera **1 coração perdido**, até o limite atual de 6; ela não aumenta a vida máxima. Com vida cheia, o item permanece no chão. Corações e ataques em andamento são preservados no salvamento. Saves da versão anterior são convertidos automaticamente para o formato 2 ao carregar; o próximo salvamento grava o novo formato. Existe um único espaço de save: iniciar outro modo não apaga o anterior, mas **Salvar e sair** o substitui.
+Cada inimigo derrotado tem **30% de chance de deixar um coração no chão**. A coleta recupera **1 coração perdido**, até o limite atual de 6; ela não aumenta a vida máxima. Com vida cheia, o item permanece no chão. Corações e ataques em andamento são preservados no salvamento. Saves dos formatos 1 e 2 continuam na cripta da fase 1; saves do formato 3 mantêm a fase e o progresso. Todos são convertidos para o formato 4 no próximo salvamento. Na vila reformulada, posições antigas que coincidam com construções ou árvores são transferidas para o chão livre mais próximo, preservando vida, recursos e inimigos derrotados. Existe um único espaço de save: iniciar outro modo não apaga o anterior, mas **Salvar e sair** o substitui.
 
 ### Experimentar e comparar
 
-Use `iniciar-jogo.bat` para a implementação atual. As alterações estão na branch local `experimento/combate-mira`, ainda sem commit ou push automático. A `main` mantém o último commit anterior, mas alterações sem commit acompanham a troca de branch; trocar de branch sozinho não desfaz a experiência.
+Use `iniciar-jogo.bat` para a implementação atual. O trabalho está na branch local `experimento/combate-mira`; commits e push são feitos manualmente pelo aluno. A `main` mantém o histórico anterior, mas alterações sem commit acompanham a troca de branch; trocar de branch sozinho não desfaz a experiência.
 
-Neste computador, `comparar-versao-anterior.bat` executa a cópia anterior preservada em `build/rollback/Motionbound-antes-combate.jar`. Também foi preservado o checkpoint anterior em `build/rollback/expedition-antes-combate.json`. O iniciador de comparação não restaura nem modifica os arquivos do projeto. O jogo antigo não lê saves no formato 2: para comparar, inicie uma nova partida e feche a janela sem salvar. A pasta `build/` é local, ignorada pelo Git e removida por `gradle clean`; preserve essas cópias antes de limpar o build.
+Neste computador, `comparar-versao-anterior.bat` executa a cópia anterior preservada em `build/rollback/Motionbound-antes-combate.jar`. Também foram preservados o checkpoint anterior em `build/rollback/expedition-antes-combate.json` e o JAR imediatamente anterior à campanha em `build/rollback/Motionbound-antes-fases.jar`. O iniciador de comparação não restaura nem modifica os arquivos do projeto. O jogo antigo não lê os novos formatos de save: para comparar, inicie uma nova partida e feche a janela sem salvar. A pasta `build/` é local, ignorada pelo Git e removida por `gradle clean`; preserve essas cópias antes de limpar o build.
 
-Para verificar as regras e o salvamento, execute `gradle check`. `gradle verifyDesktop` abre brevemente o jogo, verifica as ações com entradas simuladas internas e grava capturas em `build/review/`, usando saves de teste separados do seu checkpoint. `gradle fatJar` gera o executável com todos os recursos.
+Para verificar combate, salvamento e conectividade dos cinco mapas, execute `gradle check`. `gradle verifyDesktop` abre brevemente o jogo, verifica os controles, a contagem regressiva, as cinco transições, derrota/reinício e continuação de saves. Grava capturas em `build/review/`, usando saves de teste separados do seu checkpoint. `gradle fatJar` gera o executável com todos os recursos.
 
-**Objetivo do protótipo:** derrotar 7 inimigos e encontrar o baú da saída, no canto superior direito da masmorra. A progressão pelas fases 0 a 5 será implementada depois.
+**Objetivo da campanha:** derrotar todos os guardiões de cada mapa e alcançar o baú da saída, marcado no minimapa. O baú só libera a próxima fase quando todos os inimigos caem. Após a fase 5, aparece a vitória da campanha.
 
 **Sem Arduino por enquanto:** esta é uma versão provisória de desenvolvimento, com seleção de modo e simulação de sensores. A estrutura `ControlSource` recebe comandos do teclado/mouse ou de amostras normalizadas; o transporte USB e a calibração real ainda faltam. A versão apresentada como jogo sério para avaliação do professor deverá funcionar com o dispositivo IoT.
 
-**Assets:** os cenários e objetos usam [Kenney Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon) e uma seleção de [Tiny Town](https://kenney.nl/assets/tiny-town) (16×16, CC0), já incluídos. Slimes, esqueletos e detalhes complementares da interface são originais do projeto; o novo herói é arte gerada com IA, documentada em `art-source/`. As licenças CC0 acompanham os respectivos packs em `assets/`.
+**Assets:** os cenários misturam Tiny Dungeon, Tiny Town, Tiny Farm e Tiny Ski (16×16, CC0). Do Ski são usados neve, pinheiros e os números 1, 2 e 3 da contagem regressiva; equipamentos esportivos e veículos não fazem parte da aventura. Slimes, esqueletos e detalhes complementares da interface são originais do projeto; o herói é arte gerada com IA, documentada em `art-source/`.
 
 ## 📌 Informações do projeto
 
@@ -96,7 +96,7 @@ Para verificar as regras e o salvamento, execute `gradle check`. `gradle verifyD
 | **Linguagem e framework** | Java com libGDX |
 | **Dispositivo de entrada** | Arduino ou ESP32 com sensores (a definir) |
 | **Foco motor** | Mão, punho e antebraço |
-| **Estrutura** | Fase 0 (tutorial) e fases 1 a 5 |
+| **Estrutura atual** | Tutorial no menu e campanha com fases 1 a 5 |
 | **Metodologia** | Kanban, com acompanhamento semanal pelo Trello |
 | **Turma** | 4H12 |
 
@@ -184,18 +184,25 @@ Movimentos da mão / punho
 
 Antes de definir os valores de ativação, será criada uma etapa de **calibração**, incluindo posição neutra e amplitude confortável. O sensor inercial não mede diretamente força de preensão: essa informação dependerá de um sensor específico.
 
-## 🗺️ Fases planejadas
+## 🗺️ Campanha implementada
 
-| Fase | Cenário | Objetivo e novidade |
-| --- | --- | --- |
-| **0** | Campo de Treinamento | Tutorial, calibração e aprendizado dos comandos físicos. |
-| **1** | Cripta Abandonada | Exploração e primeiros confrontos contra inimigos simples. |
-| **2** | Minas Perdidas | Armadilhas e inimigos com ataques à distância. |
-| **3** | Floresta Corrompida | Inimigos especiais e utilização estratégica das habilidades. |
-| **4** | Fortaleza | Combinação de desafios e mecânicas das fases anteriores. |
-| **5** | Dungeon Final | Confronto com um chefe e encerramento da aventura. |
+| Fase | Cenário | Dificuldade | Guardiões | Ambientação |
+| --- | --- | --- | --- | --- |
+| **1** | A Cripta Esquecida | Fácil | 7 | Masmorra original com quatro salas, túmulos, tochas e vegetação. |
+| **2** | Vila das Lanternas | Moderado | 10 | Casas com janelas e chaminés, praça de pedra, jardins, poço, apiário cercado, moradores decorativos e portaria com torres. |
+| **3** | Campos Corrompidos | Intermediário | 14 | Lavouras, celeiro, casa, recipientes e cercas com Tiny Farm e Town. |
+| **4** | Passagem Congelada | Difícil | 18 | Caminho em patamares, pinheiros, neve e flocos animados do Tiny Ski. |
+| **5** | Fortaleza do Crepúsculo | Muito difícil | 22 | Salões e corredores conectados, lápides, mobiliário e tapete cerimonial. |
 
-A dificuldade aumentará principalmente na complexidade das situações e decisões do jogo, **não necessariamente no esforço físico solicitado**.
+Cada entrada mostra **Fase N - Nível ...** e o nome do mapa com a fonte pixelada da interface. A contagem **3, 2, 1** usa os próprios sprites do Tiny Ski, ampliados sem suavização. Durante a apresentação, personagens, combate e cronômetro ficam parados. `Esc` pausa a apresentação e retoma de onde parou.
+
+As tochas de parede aparecem somente nas paredes dos mapas internos. As fases externas não recebem tochas soltas nem os respectivos efeitos de luz sobre o chão.
+
+Ao concluir uma etapa, o jogador pode descansar, **seguir para a próxima fase** ou **salvar e sair**. A próxima etapa repõe vida, vigor, mana e três poções; os contadores e métricas são específicos de cada fase. A derrota e `R` reiniciam somente a fase atual; após vencer a quinta fase, **Nova campanha** volta à primeira.
+
+O save em `%USERPROFILE%\.motionbound\saves\expedition.json` preserva número da fase, mapa, inimigos, corações, recursos, combate, tempo restante da apresentação e conclusão da etapa. Um save na tela de conclusão volta para essa tela, permitindo seguir sem repetir a fase. O salvamento é acionado pelo jogador em **Salvar e sair**, na pausa ou entre fases.
+
+A dificuldade aumenta pela quantidade de guardiões, maior presença de esqueletos e disposição dos caminhos. Os controles, o dano dos inimigos e os limiares de entrada permanecem iguais. O modo reabilitação usa a mesma campanha, com mira assistida e ritmo reduzido; o terreno nevado é visual, sem exigir gestos extras ou controle de escorregamento.
 
 ## 📊 Métricas de desempenho
 
@@ -252,11 +259,12 @@ Motionbound/
 - [x] Criar o repositório e confirmar o cadastro na disciplina;
 - [ ] Validar com o professor o controlador físico e os sensores propostos;
 - [ ] Construir e testar o controlador;
-- [x] Inicializar o protótipo do jogo em libGDX (v0.1.1, ainda aguardando teste no Windows);
+- [x] Inicializar e verificar o protótipo do jogo em libGDX no Windows;
 - [ ] Integrar Arduino e controles do personagem;
-- [ ] Desenvolver combate, habilidades e interface;
-- [ ] Implementar tutorial e as cinco fases;
-- [ ] Implementar métricas e tela de resultados;
+- [x] Desenvolver combate, habilidades e interface;
+- [x] Implementar tutorial de comandos no menu e as cinco fases;
+- [x] Implementar resultados e métricas de jogo/simulação;
+- [ ] Implementar calibração e métricas dos sensores físicos;
 - [ ] Testar o jogo, gerar executável e produzir o short paper.
 
 ## 📋 Organização e acompanhamento
