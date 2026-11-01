@@ -2,6 +2,8 @@ package br.edu.motionbound.ui;
 
 import br.edu.motionbound.game.DungeonMap;
 import br.edu.motionbound.game.GameAssets;
+import br.edu.motionbound.input.GameMode;
+import br.edu.motionbound.game.MeleeSwing;
 import br.edu.motionbound.ui.UiIcons.Icon;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -17,13 +19,17 @@ import com.badlogic.gdx.utils.viewport.ExtendViewport;
 
 /** Pixel dungeon interface: carved stone, bronze fittings and parchment field notes. */
 public final class GameUi implements Disposable {
-    public enum Screen { MENU, PLAYING, PAUSED, DEFEAT, VICTORY }
-    public enum Action { NONE, RESUME, NEW_GAME, LOAD, SAVE_EXIT, FULLSCREEN, PAUSE }
+    public enum Screen { MODE_SELECT, REHAB_SETUP, MENU, PLAYING, PAUSED, DEFEAT, VICTORY }
+    public enum Action { NONE, RESUME, NEW_GAME, LOAD, SAVE_EXIT, FULLSCREEN, PAUSE,
+        CONVENTIONAL, REHABILITATION, MODE_SELECT, START_SIMULATION }
     private enum Page { SUMMARY, SETTINGS, TUTORIAL }
     public static final class View {
         public int hp, maxHp, heals, defeated, total;
         public float stamina, mana, elapsed, x, y, attackCd, magicCd, healCd;
         public boolean hasSave;
+        public GameMode mode=GameMode.CONVENTIONAL,savedMode=GameMode.CONVENTIONAL;
+        public int attacks,hits,heartsCollected;
+        public float pressure,pressureAccuracy,pressureSeconds;
         public String message = "";
         public DungeonMap dungeon;
     }
@@ -83,10 +89,68 @@ public final class GameUi implements Disposable {
         return true;
     }
 
+    /** Gameplay never consumes clicks intended for a HUD panel or the pause button. */
+    public boolean blocksGameplayPointer() {
+        pointer.set(Gdx.input.getX(),Gdx.input.getY());viewport.unproject(pointer);
+        float top=height-28,cx=width/2;
+        return contains(28,top-154,354,154)||contains(width-248,top-214,220,214)
+                ||contains(cx-242,height-103,484,75)||contains(cx-308,28,616,80)
+                ||contains(width-181,28,153,44)||contains(20,24,180,60);
+    }
+    private boolean contains(float x,float y,float w,float h) {
+        return pointer.x>=x&&pointer.x<=x+w&&pointer.y>=y&&pointer.y<=y+h;
+    }
+    private boolean canContinue(View view) {return view.hasSave&&view.savedMode==view.mode;}
+
+    private void modeSelect(View view) {
+        float x=(width-1040)/2,y=(height-550)/2;
+        panel(x,y,1040,550);
+        center(display,"MOTIONBOUND",width/2,y+506,WHITE);
+        center(heading,"Escolha sua jornada",width/2,y+414,GOLD);
+        center(small,"Duas formas de explorar a mesma cripta.",width/2,y+367,MUTED);
+        parchment(x+28,y+144,476,194);
+        parchment(x+536,y+144,476,194);
+        item(103,x+45,y+278,42);
+        label(body,"MODO CONVENCIONAL",x+101,y+317,PAPER_TEXT);
+        label(small,"Mouse e teclado. Mira livre em 360 graus.",x+48,y+267,PAPER_MUTED);
+        label(small,"Espada, magia e cura com novas animações.",x+48,y+243,PAPER_MUTED);
+        if(button(x+49,y+165,434,52,"Jogar com mouse e teclado",true,false))action=Action.CONVENTIONAL;
+        icons.draw(batch,Icon.COG,x+553,y+278,42);
+        label(body,"MODO REABILITAÇÃO",x+609,y+317,PAPER_TEXT);
+        label(small,"Inclinação e aperto. Mira assistida.",x+556,y+267,PAPER_MUTED);
+        label(small,"Hardware em preparação. Simulação disponível.",x+556,y+243,PAPER_MUTED);
+        if(button(x+557,y+165,434,52,"Preparar reabilitação",false,false))action=Action.REHABILITATION;
+        if(button(width/2-205,y+57,410,44,"Sair do jogo",false,true))Gdx.app.exit();
+        center(small,"SETAS: navegar   ENTER: escolher   F11: tela cheia",width/2,y+30,MUTED);
+        if(!view.message.isEmpty())center(small,view.message,width/2,y-18,RED);
+    }
+
+    private void rehabSetup(View view) {
+        float x=(width-1040)/2,y=(height-550)/2;
+        panel(x,y,1040,550);
+        center(small,"MODO REABILITAÇÃO / PREPARAÇÃO",width/2,y+510,MINT);
+        center(heading,"A próxima jornada começa aqui",width/2,y+468,WHITE);
+        parchment(x+30,y+207,980,197);
+        icons.draw(batch,Icon.COG,x+49,y+320,56);
+        label(body,"ESP32 + MPU6050 + FSR402",x+125,y+375,PAPER_TEXT);
+        label(small,"Inclinação para mover. Aperto para atacar. Mira assistida.",x+125,y+339,PAPER_MUTED);
+        label(small,"Conexão USB e calibração com o dispositivo: próxima etapa.",x+52,y+292,PAPER_TEXT);
+        label(small,"Você pode testar agora uma SIMULAÇÃO pelo teclado.",x+52,y+262,PAPER_MUTED);
+        label(small,"Dados artificiais: os resultados não representam uma avaliação clínica.",x+52,y+237,PAPER_MUTED);
+        center(small,"SIMULAÇÃO: I J K L = inclinar / F = apertar / SHIFT + F = pressão alta",width/2,y+184,MUTED);
+        float by=y+116;
+        if(canContinue(view)) {
+            if(button(x+40,by,464,52,"Continuar simulação salva",true,false))action=Action.LOAD;
+            if(button(x+536,by,464,52,"Nova simulação",false,false))action=Action.START_SIMULATION;
+        } else if(button(width/2-232,by,464,52,"Experimentar simulação",true,false))action=Action.START_SIMULATION;
+        if(button(width/2-232,y+48,464,46,"Voltar à escolha de modo",false,false))action=Action.MODE_SELECT;
+    }
+
     public Action draw(Screen screen, View view) {
         action = Action.NONE;
         if (screen != previous) { focus = 0; page = Page.SUMMARY; previous = screen; }
-        int count = screen == Screen.PAUSED ? 5 : screen == Screen.MENU ? (view.hasSave ? 3 : 2)
+        int count = screen == Screen.PAUSED ? 5 : screen == Screen.MENU ? (canContinue(view) ? 4 : 3)
+                : screen == Screen.MODE_SELECT ? 3 : screen == Screen.REHAB_SETUP ? (canContinue(view)?3:2)
                 : screen == Screen.PLAYING ? 1 : 2;
         if (Gdx.input.isKeyJustPressed(Input.Keys.DOWN) || Gdx.input.isKeyJustPressed(Input.Keys.S)) focus = (focus + 1) % count;
         if (Gdx.input.isKeyJustPressed(Input.Keys.UP) || Gdx.input.isKeyJustPressed(Input.Keys.W)) focus = (focus + count - 1) % count;
@@ -102,7 +166,9 @@ public final class GameUi implements Disposable {
                 rune(36, height / 2 - 100 + i * 48, GOLD, .4f);
                 rune(width - 44, height / 2 - 100 + i * 48, GOLD, .4f);
             }
-            if (screen == Screen.PAUSED) pause(view);
+            if(screen==Screen.MODE_SELECT)modeSelect(view);
+            else if(screen==Screen.REHAB_SETUP)rehabSetup(view);
+            else if (screen == Screen.PAUSED) pause(view);
             else if (screen == Screen.MENU) welcome(view);
             else result(screen, view);
         }
@@ -114,7 +180,7 @@ public final class GameUi implements Disposable {
         float top = height - 28;
         panel(28, top - 154, 354, 154);
         item(101, 45, top - 35, 26);
-        label(small, "EXPLORADOR DA CRIPTA", 80, top - 13, GOLD);
+        label(small, v.mode==GameMode.CONVENTIONAL?"EXPLORADOR / MOUSE":"REABILITAÇÃO / DEMO", 80, top - 13, GOLD);
         rect(48, top - 41, 310, 2, LINE);
         label(small, "VIDA", 49, top - 50, RED);
         for (int i = 0; i < v.maxHp; i++) icons.fill(batch, Icon.HEART, 130 + i * 30, top - 77, 28, i < v.hp ? 1 : 0);
@@ -157,18 +223,28 @@ public final class GameUi implements Disposable {
         label(body, v.defeated == v.total ? "Encontre o baú da saída" : "Derrote os 7 guardiões", cx - 178, height - 65, PAPER_TEXT);
 
         float start = cx - 308;
-        skill(start, 28, "ESPAÇO", "Espada", v.attackCd, .34f, GOLD, "Corpo a corpo");
-        skill(start + 208, 28, "J", "Magia", v.magicCd, .75f, BLUE, "25 de mana");
-        skill(start + 416, 28, "K", "Cura", v.healCd, 1.7f, MINT, v.heals + " restantes");
-        label(small, "EXPEDIÇÃO 01", 28, 66, GOLD);
+        boolean demo=v.mode==GameMode.REHABILITATION;
+        skill(start, 28, demo?"F (DEMO)":"MOUSE ESQ.", "Espada", v.attackCd, MeleeSwing.COOLDOWN, GOLD, demo?"Mira assistida":"Mira em 360 graus");
+        skill(start + 208, 28, demo?"EM BREVE":"MOUSE DIR.", "Magia", v.magicCd, .75f, BLUE, demo?"Etapa seguinte":"25 de mana");
+        skill(start + 416, 28, demo?"COLETA":"ESPAÇO", "Cura", v.healCd, 1.7f, MINT, demo?"Coração: +1":v.heals + " poções");
+        label(small, demo?"DADOS SIMULADOS":"EXPEDIÇÃO 01", 28, 66, demo?BLUE:GOLD);
         label(body, time(v.elapsed), 28, 46, WHITE);
+        if(demo) {
+            panel(width/2-308,121,616,51);
+            label(small,"IJKL: inclinar   F: apertar   SHIFT+F: pressão alta",width/2-290,159,MUTED);
+            rect(width/2-290,132,150,6,INK);
+            rect(width/2-290,132,150*v.pressure,6,v.pressure>.8f?RED:MINT);
+            label(small,"Pressão na faixa: "+Math.round(v.pressureAccuracy)+"%",width/2-120,146,MINT);
+        }
         if (button(width - 181, 28, 153, 44, "ESC  Menu", false, false)) action = Action.PAUSE;
     }
 
     private void skill(float x, float y, String key, String name, float cooldown, float max, Color color, String detail) {
         panel(x, y, 200, 80);
         socket(x + 12, y + 16, 48);
-        item(name.equals("Espada") ? 103 : name.equals("Magia") ? 116 : 115, x + 12, y + 16, 48);
+        if(key.equals("COLETA"))batch.draw(art.heartTexture,x+21,y+25,30,30);
+        else item(name.equals("Espada") ? 103 : name.equals("Magia") ? 116 : 115, x + 12, y + 16, 48);
+        if(key.equals("EM BREVE"))icons.draw(batch,Icon.LOCK,x+27,y+28,28);
         if (cooldown > 0) rect(x + 16, y + 20, 40, 40 * MathUtils.clamp(cooldown / max, 0, 1), INK, .75f);
         rect(x + 68, y + 7, 118 * (1 - MathUtils.clamp(cooldown / max, 0, 1)), 3, color);
         label(small, key, x + 72, y + 70, color);
@@ -186,7 +262,7 @@ public final class GameUi implements Disposable {
         rect(x + 294, y + 30, 4, 450, INK);
         rect(x + 298, y + 30, 2, 450, GOLD);
         socket(x + 116, y + 430, 64);
-        batch.setColor(Color.WHITE); batch.draw(art.hero[0][0], x + 124, y + 438, 48, 48);
+        batch.setColor(Color.WHITE); batch.draw(art.heroPortrait, x + 124, y + 434, 48, 56);
         center(body, "ACAMPAMENTO", x + 148, y + 422, GOLD);
         center(small, "A espada pode descansar.", x + 148, y + 396, MUTED);
         if (button(x + 28, y + 322, 240, 54, "Retomar aventura", true, false)) action = Action.RESUME;
@@ -197,25 +273,28 @@ public final class GameUi implements Disposable {
         float content = x + 330;
         parchment(content - 10, y + 55, 716, 435);
         if (page == Page.SUMMARY) summary(v, content, y);
-        else if (page == Page.SETTINGS) settings(content, y);
-        else tutorial(content, y);
+        else if (page == Page.SETTINGS) settings(v,content, y);
+        else tutorial(v,content, y);
         center(small, "SETAS: navegar   ENTER: escolher   ESC: voltar   F11: tela cheia", width / 2, y - 20, MUTED);
         if (!v.message.isEmpty()) label(small, v.message, content, y + 36, RED);
     }
 
     private void summary(View v, float x, float y) {
         label(heading, "Diário da expedição", x + 14, y + 464, PAPER_TEXT);
-        label(small, "Nas profundezas, cada vitória deixa sua marca.", x + 16, y + 410, PAPER_MUTED);
+        label(small, v.mode==GameMode.CONVENTIONAL?"Combate com mira livre / mouse e teclado.":"SIMULAÇÃO DE SENSORES / ainda sem dispositivo conectado.", x + 16, y + 410, PAPER_MUTED);
         journalStat(x + 12, y + 268, "GUARDIÕES", v.defeated + " / " + v.total, Icon.SKULL);
         journalStat(x + 244, y + 268, "TEMPO ATIVO", time(v.elapsed), Icon.CLOCK);
-        journalStat(x + 476, y + 268, "FRASCOS", "0" + v.heals, Icon.HEART);
+        if(v.mode==GameMode.REHABILITATION)
+            journalStat(x+476,y+268,"NA FAIXA",v.pressureSeconds>0?Math.round(v.pressureAccuracy)+"%":"--",Icon.BOLT);
+        else journalStat(x + 476, y + 268, "FRASCOS", "0" + v.heals, Icon.HEART);
         ornament(x + 20, y + 258, 650, PAPER_MUTED);
         icons.draw(batch, Icon.SCROLL, x + 12, y + 186, 48);
         label(small, v.defeated == v.total ? "O CAMINHO ESTÁ LIVRE" : "JURAMENTO DO EXPLORADOR", x + 76, y + 236, PAPER_MUTED);
         label(body, v.defeated == v.total ? "Encontre o baú ao nordeste." : "Derrote os " + (v.total - v.defeated) + " guardiões restantes.", x + 76, y + 208, PAPER_TEXT);
         for (int i = 0; i < v.total; i++) icons.fill(batch, Icon.SKULL, x + 78 + i * 36, y + 153, 28, i < v.defeated ? 1 : 0);
         label(small, "VIDA " + v.hp + "/" + v.maxHp + "    VIGOR " + Math.round(v.stamina) + "%    MANA " + Math.round(v.mana) + "%", x + 20, y + 119, PAPER_TEXT);
-        label(small, "Salvar e sair registra este capítulo da sua jornada.", x + 20, y + 90, PAPER_MUTED);
+        String accuracy=v.attacks==0?"--":Math.round(100f*v.hits/v.attacks)+"%";
+        label(small, "GOLPES "+v.attacks+"   ACERTOS "+accuracy+"   CORAÇÕES "+v.heartsCollected, x + 20, y + 90, PAPER_MUTED);
     }
 
     private void journalStat(float x, float y, String title, String value, Icon icon) {
@@ -232,14 +311,14 @@ public final class GameUi implements Disposable {
         label(heading, value, x + 76, y + 60, color);
     }
 
-    private void settings(float x, float y) {
+    private void settings(View view,float x, float y) {
         label(heading, "Ajustes do aventureiro", x + 14, y + 464, PAPER_TEXT);
         label(small, "Novos recursos serão forjados em breve.", x + 16, y + 410, PAPER_MUTED);
         settingCard(x, y + 280, "Áudio", "Volume geral, música e efeitos sonoros.");
         settingCard(x, y + 174, "Arduino / ESP32", "Conexão, sensores e calibração de movimentos.");
         label(body, "Exibição", x + 20, y + 142, PAPER_TEXT);
         label(small, "F11 alterna entre tela cheia e janela.", x + 20, y + 112, PAPER_MUTED);
-        label(small, "Teclado ativo. Nenhum dispositivo é necessário.", x + 20, y + 83, PAPER_MUTED);
+        label(small, view.mode==GameMode.CONVENTIONAL?"Modo convencional: mouse e teclado.":"Modo reabilitação: simulação de bancada ativa.", x + 20, y + 83, PAPER_MUTED);
     }
 
     private void settingCard(float x, float y, String title, String description) {
@@ -250,14 +329,26 @@ public final class GameUi implements Disposable {
         right(small, "EM BREVE", x + 666, y + 71, PAPER_MUTED);
     }
 
-    private void tutorial(float x, float y) {
+    private void tutorial(View view,float x, float y) {
+        if(view.mode==GameMode.REHABILITATION) {
+            label(heading,"Bancada de sensores",x+14,y+464,PAPER_TEXT);
+            label(small,"SIMULAÇÃO: entradas artificiais, sem avaliação clínica.",x+16,y+410,PAPER_MUTED);
+            tutorialCard(x,y+286,"I J K L","Inclinação","I: cima / K: baixo / J: esq. / L: dir.",MINT);
+            tutorialCard(x+354,y+286,"F","Aperto","Solte e aperte para cada novo golpe.",GOLD);
+            tutorialCard(x,y+190,"SHIFT + F","Pressão alta","Demonstra uma leitura fora da faixa.",GOLD);
+            tutorialCard(x+354,y+190,"MIRA ASSISTIDA","Espada","Busca alvos na direção da inclinação.",BLUE);
+            tutorialCard(x,y+94,"COLETAR","Corações","Inimigos: 30% de chance / cura +1.",MINT);
+            tutorialCard(x+354,y+94,"ESC / F11","Pausa / Tela cheia","R reinicia a simulação e os contadores.",MUTED);
+            label(small,"USB, calibração real e demais gestos: próxima etapa.",x+16,y+86,PAPER_TEXT);
+            return;
+        }
         label(heading, "Grimório do explorador", x + 14, y + 464, PAPER_TEXT);
-        label(small, "Conheça suas armas antes de entrar nas sombras.", x + 16, y + 410, PAPER_MUTED);
+        label(small, "Movimento e mira independentes. Golpes também nas diagonais.", x + 16, y + 410, PAPER_MUTED);
         tutorialCard(x, y + 286, "WASD / SETAS", "Mover", "Explore em oito direções.", MINT);
         tutorialCard(x + 354, y + 286, "SHIFT", "Correr", "Consome vigor; recupera ao descansar.", GOLD);
-        tutorialCard(x, y + 190, "ESPAÇO", "Espada", "Ataque na direção em que está olhando.", GOLD);
-        tutorialCard(x + 354, y + 190, "J", "Magia", "Custa 25 de mana; ela se regenera.", BLUE);
-        tutorialCard(x, y + 94, "K", "Curar", "Recupera 2 de vida. Até 3 usos.", MINT);
+        tutorialCard(x, y + 190, "MOUSE ESQUERDO", "Espada", "Arco curto na direção do cursor.", GOLD);
+        tutorialCard(x + 354, y + 190, "MOUSE DIREITO", "Magia", "Dano leve e recuo; custa 25 de mana.", BLUE);
+        tutorialCard(x, y + 94, "ESPAÇO", "Curar", "Poção +2; inimigos: 30% de coração.", MINT);
         tutorialCard(x + 354, y + 94, "ESC / F11", "Pausa / Tela cheia", "R reinicia a fase durante a aventura.", MUTED);
         label(small, "MISSÃO: vença os 7 guardiões e alcance o baú ao nordeste.", x + 16, y + 86, PAPER_TEXT);
     }
@@ -281,15 +372,16 @@ public final class GameUi implements Disposable {
         center(body, "A CRIPTA ESQUECIDA", width / 2, y + 366, GOLD);
         center(small, "Explore os corredores. Enfrente os guardiões. Encontre a saída.", width / 2, y + 318, MUTED);
         ornament(x + 110, y + 282, 700, GOLD);
-        float by = y + 192;
-        if (v.hasSave) {
+        float by = y + 216;
+        if (canContinue(v)) {
             if (button(width / 2 - 205, by, 410, 54, "Continuar expedição", true, false)) action = Action.LOAD;
             by -= 64;
         }
         if (button(width / 2 - 205, by, 410, 54, "Nova aventura", !v.hasSave, false)) action = Action.NEW_GAME;
-        if (button(width / 2 - 205, by - 58, 410, 44, "Sair do jogo", false, true)) Gdx.app.exit();
-        center(small, "ESC: acampamento e grimório    F11: tela cheia", width / 2, y + 44, MUTED);
-        if (!v.message.isEmpty()) center(small, v.message, width / 2, y - 16, RED);
+        if (button(width / 2 - 205, by - 58, 410, 44, "Escolher outro modo", false, false)) action=Action.MODE_SELECT;
+        if (button(width / 2 - 205, by - 110, 410, 44, "Sair do jogo", false, true)) Gdx.app.exit();
+        center(small, v.message.isEmpty()?"MOUSE ESQ.: espada   MOUSE DIR.: magia   ESPAÇO: cura":v.message,
+                width / 2, y - 20, v.message.isEmpty()?MUTED:RED);
     }
 
     private void result(Screen screen, View v) {
@@ -302,6 +394,8 @@ public final class GameUi implements Disposable {
         center(small, won ? "Todos os guardiões caíram. Você encontrou a saída." : "Recupere o fôlego e tente uma nova estratégia.", width / 2, y + 338, MUTED);
         stat(x + 185, y + 185, "GUARDIÕES", v.defeated + " / " + v.total, MINT);
         stat(x + 435, y + 185, "TEMPO ATIVO", time(v.elapsed), GOLD);
+        if(v.mode==GameMode.REHABILITATION)
+            center(small,"SIMULAÇÃO / pressão na faixa: "+Math.round(v.pressureAccuracy)+"% / dados artificiais",width/2,y+186,BLUE);
         if (button(width / 2 - 205, y + 99, 410, 54, "Jogar novamente", true, false)) action = Action.NEW_GAME;
         if (button(width / 2 - 205, y + 40, 410, 44, "Sair do jogo", false, true)) Gdx.app.exit();
     }
