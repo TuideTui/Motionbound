@@ -1,0 +1,9 @@
+Pack oficial: https://kenney.nl/assets/tiny-dungeon
+Licenca: CC0 1.0 Universal
+
+Este ZIP inclui arte provisoria original para funcionar imediatamente.
+Para trocar o piso, paredes e objetos pelos sprites do Tiny Dungeon, execute:
+  instalar-sprites-kenney.bat
+
+O arquivo oficial Tilemap/tilemap_packed.png sera copiado para esta pasta.
+O jogo detecta automaticamente a presenca do arquivo.

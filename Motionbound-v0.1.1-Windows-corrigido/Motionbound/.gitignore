@@ -1,0 +1,31 @@
+# Java / Gradle
+.gradle/
+build/
+out/
+*.class
+*.log
+hs_err_pid*
+
+# VS Code / JetBrains
+.vscode/
+.idea/
+*.iml
+
+# Local downloads and tools
+.tools/
+*.zip
+*.tmp
+.DS_Store
+Thumbs.db
+
+# Local user-specific settings
+local.properties
+
+# VS Code Java caches
+.settings/
+.classpath
+.project
+logs/
+
+# Documentação local
+docs/

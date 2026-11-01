@@ -1,0 +1,7 @@
+Pack oficial: https://kenney.nl/assets/tiny-dungeon
+Licenca: CC0 1.0 Universal
+
+O atlas oficial Tiny Dungeon ja esta incluido em tilemap_packed.png.
+Uma selecao de decoracoes do Tiny Town esta em tiny-town/.
+As licencas originais acompanham os dois packs.
+Consulte docs/ASSETS.md para fontes, creditos e uso de cada recurso.

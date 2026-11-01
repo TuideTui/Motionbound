@@ -1,0 +1,19 @@
+MOTIONBOUND 0.1.1 — WINDOWS
+
+1. Coloque a pasta Motionbound em:
+   C:\Users\ThurC\OneDrive\Desktop\VSCode\Jogo Projeto Jogos Digitais\
+2. Abra a pasta Motionbound (nao a pasta de cima) no VS Code.
+3. Dê dois cliques em iniciar-jogo.bat dentro de Motionbound.
+4. A primeira execucao precisa da internet para instalar Gradle e libGDX.
+
+Para rodar pelo PowerShell:
+cd -LiteralPath 'C:\Users\ThurC\OneDrive\Desktop\VSCode\Jogo Projeto Jogos Digitais\Motionbound'
+.\iniciar-jogo.bat
+
+O script agora seleciona o JDK 25 existente e fixa a pasta correta do Gradle.
+Se houver erros, envie o terminal completo. Nao execute gradle run na pasta pai.
+
+O pack Kenney pode ser instalado mais tarde com instalar-sprites-kenney.bat.
+Sprites provisórios ja incluidos.
+
+Nenhum commit foi feito: os commits do GitHub continuam sob controle do aluno.

@@ -1,0 +1,96 @@
+plugins {
+    id 'application'
+}
+
+group = 'br.edu.motionbound'
+version = '0.1.1'
+
+// OneDrive can mark generated directories read-only on Windows, preventing
+// Gradle from replacing stale compiler outputs. Only adjust generated folders.
+if (System.getProperty('os.name').toLowerCase().contains('windows')) {
+    ['classes', 'generated', 'resources', 'test-results', 'reports', 'tmp/compileJava', 'tmp/compileVerificationJava'].each { name ->
+        def generated = layout.buildDirectory.dir(name).get().asFile
+        if (generated.exists()) {
+            java.nio.file.Files.setAttribute(generated.toPath(), 'dos:readonly', false)
+            generated.eachDirRecurse { directory ->
+                java.nio.file.Files.setAttribute(directory.toPath(), 'dos:readonly', false)
+            }
+        }
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext.gdxVersion = '1.14.2'
+
+dependencies {
+    implementation "com.badlogicgames.gdx:gdx:${gdxVersion}"
+    implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:${gdxVersion}"
+    runtimeOnly "com.badlogicgames.gdx:gdx-platform:${gdxVersion}:natives-desktop"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+application {
+    mainClass = 'br.edu.motionbound.DesktopLauncher'
+}
+
+sourceSets {
+    main {
+        resources.srcDirs = ['assets']
+    }
+    verification {
+        compileClasspath += sourceSets.main.output + configurations.runtimeClasspath
+        runtimeClasspath += sourceSets.main.output + configurations.runtimeClasspath
+    }
+}
+
+tasks.named('run', JavaExec) {
+    workingDir = file('assets')
+    standardInput = System.in
+}
+
+tasks.register('fatJar', Jar) {
+    group = 'distribution'
+    description = 'Build a standalone executable JAR with the game and native libraries.'
+    archiveBaseName = 'Motionbound'
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest { attributes('Main-Class': application.mainClass.get()) }
+    from sourceSets.main.output
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('.jar') }.collect { zipTree(it) }
+    }
+    exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+}
+
+tasks.register('verifySave', JavaExec) {
+    group = 'verification'
+    description = 'Verify checkpoint round-trips, validation and safe file replacement offline.'
+    dependsOn verificationClasses
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'br.edu.motionbound.game.SaveDataTest'
+    doFirst { args layout.buildDirectory.get().asFile.absolutePath }
+}
+
+tasks.named('check') { dependsOn 'verifySave' }
+
+tasks.register('verifyDesktop', JavaExec) {
+    group = 'verification'
+    description = 'Open the desktop game briefly; verify HUD, pause navigation, fullscreen and save/load.'
+    dependsOn verificationClasses
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'br.edu.motionbound.DesktopSmokeTest'
+    workingDir = file('assets')
+    doFirst { args layout.buildDirectory.dir('review').get().asFile.absolutePath }
+}
