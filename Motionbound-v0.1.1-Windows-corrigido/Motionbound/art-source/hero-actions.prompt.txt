@@ -1,0 +1,28 @@
+Motionbound hero actions — generation specification
+
+Tool: OpenAI image_gen.imagegen (transparent-background generation).
+Source retained as hero-actions-generated.png. This is generated concept/game art;
+it is not part of the Kenney packs and must not be credited as Kenney artwork.
+
+Prompt specification used for the generated sheet:
+Transparent sprite sheet with exactly 8 columns and 4 rows, 32 poses total.
+The same tiny top-down dungeon adventurer throughout: blue-grey helmet, cream
+face, teal tunic, blue cloak, dark boots and gold belt. Crisp low-resolution pixel
+art with a compact 12–18 colour palette. No weapons, trails, shadows, text, labels,
+borders or background. Weapons and effects will be drawn separately in the game.
+Each cell represents a native 32x32 grid with a body about 16 pixels tall and
+feet consistently anchored near y=23. Rows: facing down, up, left, right.
+Columns: idle, walk A, walk B, sword wind-up, strike, recovery, magic cast, heal.
+Keep the character's identity, scale and foot anchor consistent; use changes
+in arms, torso, stance and cloak to make each action readable.
+
+Import from the game project folder with JDK 17+:
+  java scripts/ImportHeroAtlas.java
+Use java.exe from the same JDK as javac.exe if the global java is still Java 8.
+
+The importer normalizes the generated sheet to 256x128 RGBA, 32x32 cells,
+18-pixel idle bodies, nearest-neighbour sampling, alpha threshold 160 and
+a fixed foot anchor at y=24. No image service or download is used at runtime.
+Game asset: assets/characters/hero-actions.png
+Diagnostic preview: build/review/hero-actions-atlas.png
+The original assets/characters/hero.png is preserved for comparison.

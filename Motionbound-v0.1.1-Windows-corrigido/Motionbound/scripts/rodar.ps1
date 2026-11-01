@@ -1,4 +1,4 @@
-param([switch]$BuildOnly)
+param([switch]$BuildOnly, [switch]$PreviousVersion)
 $ErrorActionPreference = 'Stop'
 $root = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 Set-Location -LiteralPath $root
@@ -47,6 +47,17 @@ $env:JAVA_HOME = $jdkHome
 $env:PATH = "$jdkBin;$env:PATH"
 Write-Host "[OK] Usando o $javacOutput (temporariamente, apenas neste script)." -ForegroundColor Green
 Write-Host "[OK] JAVA_HOME = $jdkHome"
+
+if ($PreviousVersion) {
+    $previousJar = Join-Path $root 'build\rollback\Motionbound-antes-combate.jar'
+    if (-not (Test-Path -LiteralPath $previousJar)) {
+        Write-Host '[ERRO] A copia local anterior nao foi encontrada em build/rollback.' -ForegroundColor Red
+        exit 1
+    }
+    Write-Host '[Motionbound] Comparacao: executando a versao preservada antes do novo combate.' -ForegroundColor Cyan
+    & $javaExe -jar $previousJar
+    exit $LASTEXITCODE
+}
 
 # Gradle 9.1.0 supports running on Java 25. Downloaded locally, no global install.
 $gradleVersion = '9.1.0'

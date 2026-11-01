@@ -42,30 +42,49 @@ cd -LiteralPath 'C:\Users\ThurC\OneDrive\Desktop\VSCode\Jogo Projeto Jogos Digit
 
 O script utiliza explicitamente a pasta onde está o arquivo `build.gradle`, independentemente da pasta atual do terminal. Para gerar um JAR com as dependências, use `gerar-executavel.bat` (arquivo esperado: `build/libs/Motionbound-0.1.1-all.jar`).
 
-**Sprites Kenney:** os atlas oficiais [Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon) e [Tiny Town](https://kenney.nl/assets/tiny-town), assim como a fonte Kenney Pixel, já estão incluídos sob CC0. Não é necessário instalar ou baixar arte para jogar. Os personagens animados continuam sendo os sprites originais provisórios do projeto.
+**Sprites:** os atlas oficiais [Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon) e [Tiny Town](https://kenney.nl/assets/tiny-town), assim como a fonte Kenney Pixel, já estão incluídos sob CC0. O herói agora usa um atlas gerado com IA, normalizado para células de 32×32 pixels: caminhada, preparação, golpe, recuperação, magia e cura em quatro direções. A espada gira livremente conforme a mira. Os arquivos e a especificação da geração estão em [art-source](art-source/hero-actions.prompt.txt); essa arte não pertence ao Kenney. Não há downloads de arte durante o jogo.
 
 **Se der erro:** envie a mensagem exibida na janela. O arquivo `docs/COMO-INICIAR-WINDOWS.md` inclui soluções para Gradle iniciado na pasta errada, Java 8 no PATH e download de dependências.
 
-### Controles provisórios (versão PC)
+### Combate com mouse e escolha de modo
+
+A abertura oferece **Modo convencional** e **Modo reabilitação**. O convencional usa os controles abaixo. Na reabilitação, **Experimentar simulação** permite testar uma bancada virtual: `I J K L` simulam inclinação, `F` simula aperto e `Shift + F` simula pressão acima da faixa. Solte e aperte novamente para cada golpe. A mira busca inimigos próximos na direção da inclinação; o personagem e os inimigos se movem mais lentamente. Nessa demonstração, a cura vem da coleta de corações e a magia fica para a próxima etapa.
+
+**O dispositivo ainda não está conectado:** a simulação alimenta `SensorControlSource` com amostras normalizadas, sem usar o mouse. O processamento inclui suavização, zona neutra, limiares separados de aperto/soltura e interrupção do movimento ao perder amostras. USB/Serial, firmware para ESP32 + MPU6050 + FSR402 e calibração real serão implementados após a chegada das peças. Os indicadores de pressão são dados artificiais, identificados na interface e no save.
 
 | Tecla | Ação |
 | --- | --- |
 | `W A S D` ou setas | Andar em 8 direções |
 | `Shift` | Correr (consome energia) |
-| `Espaço` | Atacar com espada |
-| `J` | Disparar magia (consome mana) |
-| `K` | Curar (até 3 usos) |
+| Mouse | Mirar livremente, inclusive nas diagonais |
+| Clique esquerdo | Espada: preparação, golpe e recuperação |
+| Clique direito | Disparar magia na direção do cursor (25 de mana) |
+| `Espaço` | Curar 2 corações com uma poção (até 3 usos) |
 | `Esc` | Abrir pausa; voltar do tutorial/configurações ao resumo; retomar pelo resumo |
 | `Enter` | Selecionar a opção destacada nos menus |
 | `Setas` / mouse | Navegar e selecionar opções nos menus |
 | `F11` | Alternar entre tela cheia e janela |
 | `R` | Reiniciar fase durante a partida |
 
+A espada alcança 28 unidades em um arco de 120 graus. A direção é fixada no início do golpe; o impacto acontece após 0,16 s e atinge cada inimigo uma única vez, respeitando paredes. Movimento e mira são independentes. A arma acompanha a mão de cada pose, com o cabo coberto pelos dedos e profundidade conforme a direção do corpo. Os inimigos reagem ao impacto com partículas e recuo.
+
+A magia causa **1 de dano** (antes, 2) e empurra o alvo na direção do projétil. Durante o recuo, o inimigo interrompe a perseguição e o ataque de contato; o deslocamento respeita as paredes. O custo continua sendo 25 de mana.
+
+Cada inimigo derrotado tem **30% de chance de deixar um coração no chão**. A coleta recupera **1 coração perdido**, até o limite atual de 6; ela não aumenta a vida máxima. Com vida cheia, o item permanece no chão. Corações e ataques em andamento são preservados no salvamento. Saves da versão anterior são convertidos automaticamente para o formato 2 ao carregar; o próximo salvamento grava o novo formato. Existe um único espaço de save: iniciar outro modo não apaga o anterior, mas **Salvar e sair** o substitui.
+
+### Experimentar e comparar
+
+Use `iniciar-jogo.bat` para a implementação atual. As alterações estão na branch local `experimento/combate-mira`, ainda sem commit ou push automático. A `main` mantém o último commit anterior, mas alterações sem commit acompanham a troca de branch; trocar de branch sozinho não desfaz a experiência.
+
+Neste computador, `comparar-versao-anterior.bat` executa a cópia anterior preservada em `build/rollback/Motionbound-antes-combate.jar`. Também foi preservado o checkpoint anterior em `build/rollback/expedition-antes-combate.json`. O iniciador de comparação não restaura nem modifica os arquivos do projeto. O jogo antigo não lê saves no formato 2: para comparar, inicie uma nova partida e feche a janela sem salvar. A pasta `build/` é local, ignorada pelo Git e removida por `gradle clean`; preserve essas cópias antes de limpar o build.
+
+Para verificar as regras e o salvamento, execute `gradle check`. `gradle verifyDesktop` abre brevemente o jogo, verifica as ações com entradas simuladas internas e grava capturas em `build/review/`, usando saves de teste separados do seu checkpoint. `gradle fatJar` gera o executável com todos os recursos.
+
 **Objetivo do protótipo:** derrotar 7 inimigos e encontrar o baú da saída, no canto superior direito da masmorra. A progressão pelas fases 0 a 5 será implementada depois.
 
-**Sem Arduino por enquanto:** esta é uma versão provisória de desenvolvimento. A estrutura `ControlSource` foi separada para permitir um futuro controle IoT configurável na interface. A versão apresentada como jogo sério para avaliação do professor deverá funcionar com o dispositivo IoT.
+**Sem Arduino por enquanto:** esta é uma versão provisória de desenvolvimento, com seleção de modo e simulação de sensores. A estrutura `ControlSource` recebe comandos do teclado/mouse ou de amostras normalizadas; o transporte USB e a calibração real ainda faltam. A versão apresentada como jogo sério para avaliação do professor deverá funcionar com o dispositivo IoT.
 
-**Assets:** os cenários e objetos usam [Kenney Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon) e uma seleção de [Tiny Town](https://kenney.nl/assets/tiny-town) (16×16, CC0), já incluídos. Personagens animados e detalhes complementares da interface são originais do projeto. Veja os arquivos e licenças em [Arte e créditos](docs/ASSETS.md).
+**Assets:** os cenários e objetos usam [Kenney Tiny Dungeon](https://kenney.nl/assets/tiny-dungeon) e uma seleção de [Tiny Town](https://kenney.nl/assets/tiny-town) (16×16, CC0), já incluídos. Slimes, esqueletos e detalhes complementares da interface são originais do projeto; o novo herói é arte gerada com IA, documentada em `art-source/`. As licenças CC0 acompanham os respectivos packs em `assets/`.
 
 ## 📌 Informações do projeto
 

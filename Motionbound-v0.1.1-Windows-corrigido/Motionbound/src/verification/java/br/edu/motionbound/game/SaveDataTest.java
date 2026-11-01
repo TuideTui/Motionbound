@@ -12,16 +12,28 @@ public final class SaveDataTest {
         require(loaded.hp == 4 && loaded.heals == 2 && loaded.defeated == 6, "Player state");
         require(loaded.elapsed == 135.5f && loaded.mana == 75 && loaded.stamina == 36, "Resources and time");
         require(loaded.enemies.size == 1 && loaded.enemies.first().hp == 1, "Enemy state");
+        require(loaded.enemies.first().kickX==CombatRules.MAGIC_KNOCKBACK,"Magic knockback survives saving");
         require(loaded.spells.size == 1 && loaded.spells.first().vy == 170, "Active projectile");
         require(loaded.magicCd == .5f && loaded.hitInvuln == .4f, "Combat timers");
+        require(loaded.version==2&&loaded.hearts.size==1&&loaded.heartsCollected==1,"Heart drops persisted");
+        require(loaded.swingTime==.13f&&!loaded.swingImpacted&&loaded.attacks==5&&loaded.hits==3,"In-progress swing persisted");
+        SaveData legacy=SaveData.decode("{\"version\":1,\"x\":120,\"y\":136,\"hp\":4,\"heals\":2,\"facing\":1,\"defeated\":6,\"enemies\":[{\"x\":216,\"y\":200,\"hp\":1,\"type\":0}],\"spells\":[]}");
+        require(legacy.version==2&&legacy.aimY==1&&legacy.hearts.isEmpty(),"Version one migration");
 
-        reject("null"); reject("{}"); reject("{version:2}"); reject("{hp:4,class:java.lang.Runtime}");
-        data.version = 9; invalid(data); data.version = 1;
+        reject("null"); reject("{}"); reject("{version:3}"); reject("{hp:4,class:java.lang.Runtime}");
+        data.version = 9; invalid(data); data.version = 2;
         data.x = Float.NaN; invalid(data); data.x = 120;
         data.hp = 0; invalid(data); data.hp = 4;
         data.defeated = 5; invalid(data); data.defeated = 6;
         data.enemies.first().x = 0; invalid(data); data.enemies.first().x = 216;
+        data.enemies.first().kickX=CombatRules.MAGIC_KNOCKBACK+2;invalid(data);data.enemies.first().kickX=CombatRules.MAGIC_KNOCKBACK;
         data.spells.first().vx = Float.POSITIVE_INFINITY; invalid(data); data.spells.first().vx = 0;
+        data.swingImpacted=true;invalid(data);data.swingImpacted=false;
+        data.pressureInBandSeconds=3;invalid(data);data.pressureInBandSeconds=1;
+        data.mode=br.edu.motionbound.input.GameMode.REHABILITATION;invalid(data);
+        data.simulatedSensors=true;
+        require(SaveData.decode(data.encode()).simulatedSensors,"Synthetic sensor data must be explicitly identified");
+        data.mode=br.edu.motionbound.input.GameMode.CONVENTIONAL;data.simulatedSensors=false;
 
         Path directory = Files.createTempDirectory(Path.of(args[0]), "save-test-");
         FileHandle file = new FileHandle(directory.resolve("expedition.json").toFile());
@@ -42,8 +54,12 @@ public final class SaveDataTest {
         data.x = 120; data.y = 136; data.hp = 4; data.heals = 2; data.facing = 1;
         data.elapsed = 135.5f; data.stamina = 36; data.mana = 75; data.defeated = 6;
         data.hitInvuln = .4f; data.magicCd = .5f;
+        data.swingTime=.13f;data.attacks=5;data.hits=3;data.pressureSeconds=2;data.pressureInBandSeconds=1;
+        data.heartsCollected=1;
+        SaveData.HeartData heart=new SaveData.HeartData();heart.x=130;heart.y=140;data.hearts.add(heart);
         SaveData.EnemyData enemy = new SaveData.EnemyData();
         enemy.x = 216; enemy.y = 200; enemy.type = 0; enemy.hp = 1; enemy.attackCd = .2f;
+        enemy.kickX=CombatRules.MAGIC_KNOCKBACK;
         data.enemies.add(enemy);
         SaveData.SpellData spell = new SaveData.SpellData();
         spell.x = 120; spell.y = 150; spell.vy = 170; spell.life = .8f;

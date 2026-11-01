@@ -3,11 +3,15 @@ package br.edu.motionbound;
 import br.edu.motionbound.game.DungeonMap;
 import br.edu.motionbound.game.GameAssets;
 import br.edu.motionbound.game.SaveData;
+import br.edu.motionbound.game.CombatRules;
+import br.edu.motionbound.game.MeleeSwing;
 import br.edu.motionbound.ui.GameUi;
 import br.edu.motionbound.ui.GameUi.Screen;
 import br.edu.motionbound.input.ControlSource;
 import br.edu.motionbound.input.KeyboardControlSource;
 import br.edu.motionbound.input.PlayerCommand;
+import br.edu.motionbound.input.GameMode;
+import br.edu.motionbound.input.SimulatedSensorSource;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
@@ -26,7 +30,8 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 /** Motionbound: phase-one offline dungeon prototype. No Arduino is required. */
 public final class MotionboundGame extends ApplicationAdapter {
     private static final int VIEW_W=384, VIEW_H=216, TILE=16;
-    private Screen scene=Screen.MENU;
+    private Screen scene=Screen.MODE_SELECT;
+    private GameMode mode=GameMode.CONVENTIONAL,savedMode=GameMode.CONVENTIONAL;
     private SpriteBatch batch;
     private ShapeRenderer shapes;
     private OrthographicCamera worldCamera;
@@ -43,9 +48,15 @@ public final class MotionboundGame extends ApplicationAdapter {
     private final Array<Enemy> enemies=new Array<>();
     private final Array<Spell> spells=new Array<>();
     private final Array<Spark> sparks=new Array<>();
+    private final Array<HeartDrop> hearts=new Array<>();
+    private final Array<DeathEcho> deaths=new Array<>();
     private final Vector2 tmp=new Vector2();
+    private final Vector2 aim=new Vector2(0,-1),cursorWorld=new Vector2();
+    private final MeleeSwing swing=new MeleeSwing();
+    private boolean cursorVisible;
     private float elapsed,screenShake,uiTime;
     private int defeated,totalEnemies;
+    private int attacks,hits,magicCasts,healsUsed,heartsCollected;
     private static final Color VOID=new Color(.055f,.064f,.10f,1f);
     private static final Color GOLD=new Color(.98f,.75f,.40f,1f);
     private static final Color ICE=new Color(.35f,.79f,1f,1f);
@@ -53,12 +64,12 @@ public final class MotionboundGame extends ApplicationAdapter {
     private static final Color GREEN=new Color(.40f,.85f,.60f,1f);
 
     private static final class Hero {
-        float x,y,walk,hitInvuln,attackCd,attackFx,magicCd,healCd,stamina=100,mana=100;
+        float x,y,walk,hitInvuln,attackCd,magicCd,healCd,castFx,healFx,stamina=100,mana=100;
         int hp=6,maxHp=6,heals=3,facing=0;
         boolean moving,running;
     }
     private static final class Enemy {
-        float x,y,speed,moveTimer,attackCd,hitFlash;
+        float x,y,speed,moveTimer,attackCd,hitFlash,kickX,kickY;
         int hp,maxHp,type;
         Enemy(float x,float y,int type) {
             this.x=x;this.y=y;this.type=type;
@@ -78,6 +89,15 @@ public final class MotionboundGame extends ApplicationAdapter {
             this.x=x;this.y=y;this.vx=vx;this.vy=vy;this.color=color;
         }
     }
+    private static final class HeartDrop {
+        float x,y;
+        HeartDrop(float x,float y){this.x=x;this.y=y;}
+    }
+    private static final class DeathEcho {
+        float x,y,life=.28f;
+        int type;
+        DeathEcho(Enemy e){x=e.x;y=e.y;type=e.type;}
+    }
     @Override public void create() {
         batch=new SpriteBatch();
         shapes=new ShapeRenderer();
@@ -88,7 +108,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         // Stable across Gradle, VS Code and the executable JAR's working directories.
         saveFile=Gdx.files.external(".motionbound/saves/expedition.json");
         if(saveFile.exists()) {
-            try { SaveData.read(saveFile);hasSave=true; }
+            try { savedMode=SaveData.read(saveFile).mode;hasSave=true; }
             catch(RuntimeException e) {message="O save não pôde ser lido. Você pode iniciar uma nova aventura.";}
         }
         controls=new KeyboardControlSource();
@@ -99,11 +119,14 @@ public final class MotionboundGame extends ApplicationAdapter {
     private void resetWorld() {
         dungeon=new DungeonMap();
         player=new Hero();player.x=7*TILE+8;player.y=8*TILE+8;
-        enemies.clear(); spells.clear();sparks.clear();
+        enemies.clear(); spells.clear();sparks.clear();hearts.clear();deaths.clear();
+        aim.set(0,-1);swing.elapsed=-1;swing.impacted=false;
+        attacks=0;hits=0;magicCasts=0;healsUsed=0;heartsCollected=0;
+        if(controls instanceof SimulatedSensorSource simulated)simulated.sensors.clearMetrics();
         spawn(13,12,0);spawn(30,8,0);spawn(39,12,1);
         spawn(8,27,0);spawn(20,21,1);spawn(38,23,0);spawn(46,26,1);
         totalEnemies=enemies.size; defeated=0;elapsed=0;screenShake=0;
-        worldCamera.position.set(player.x,player.y,0);
+        worldCamera.position.set(Math.max(VIEW_W/2f,player.x),Math.max(VIEW_H/2f,player.y),0);
         worldCamera.update();
     }
     private void spawn(int tileX,int tileY,int type) {
@@ -114,8 +137,9 @@ public final class MotionboundGame extends ApplicationAdapter {
         if(scene!=Screen.PAUSED) uiTime+=dt;
         if(Gdx.input.isKeyJustPressed(Input.Keys.F11)) toggleFullscreen();
         if(Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            if(scene==Screen.PLAYING) scene=Screen.PAUSED;
-            else if(scene==Screen.PAUSED && !ui.backToSummary()) scene=Screen.PLAYING;
+            if(scene==Screen.PLAYING) {scene=Screen.PAUSED;controls.reset();}
+            else if(scene==Screen.PAUSED && !ui.backToSummary()) {scene=Screen.PLAYING;controls.reset();}
+            else if(scene==Screen.MENU||scene==Screen.REHAB_SETUP)scene=Screen.MODE_SELECT;
         }
         if((scene==Screen.DEFEAT||scene==Screen.VICTORY) && Gdx.input.isKeyJustPressed(Input.Keys.R)) {
             resetWorld();scene=Screen.PLAYING;
@@ -138,13 +162,24 @@ public final class MotionboundGame extends ApplicationAdapter {
         uiView.defeated=defeated;uiView.total=totalEnemies;uiView.x=player.x;uiView.y=player.y;
         uiView.attackCd=player.attackCd;uiView.magicCd=player.magicCd;uiView.healCd=player.healCd;
         uiView.dungeon=dungeon;uiView.hasSave=hasSave;uiView.message=message;
+        uiView.mode=mode;uiView.savedMode=savedMode;
+        uiView.attacks=attacks;uiView.hits=hits;uiView.heartsCollected=heartsCollected;
+        uiView.pressure=0;uiView.pressureAccuracy=0;uiView.pressureSeconds=0;
+        if(controls instanceof SimulatedSensorSource simulated) {
+            uiView.pressure=simulated.sensors.pressure();uiView.pressureAccuracy=simulated.sensors.pressureAccuracy();
+            uiView.pressureSeconds=simulated.sensors.pressureSeconds;
+        }
         switch(ui.draw(scene,uiView)) {
             case NEW_GAME -> {resetWorld();message="";scene=Screen.PLAYING;}
-            case RESUME -> scene=Screen.PLAYING;
-            case PAUSE -> scene=Screen.PAUSED;
+            case RESUME -> {controls.reset();scene=Screen.PLAYING;}
+            case PAUSE -> {controls.reset();scene=Screen.PAUSED;}
             case LOAD -> loadGame();
             case SAVE_EXIT -> saveAndExit();
             case FULLSCREEN -> toggleFullscreen();
+            case CONVENTIONAL -> {setMode(GameMode.CONVENTIONAL);message="";scene=Screen.MENU;}
+            case REHABILITATION -> {setMode(GameMode.REHABILITATION);message="";scene=Screen.REHAB_SETUP;}
+            case MODE_SELECT -> {message="";scene=Screen.MODE_SELECT;}
+            case START_SIMULATION -> {setMode(GameMode.REHABILITATION);resetWorld();message="";scene=Screen.PLAYING;}
             default -> { }
         }
     }
@@ -152,35 +187,41 @@ public final class MotionboundGame extends ApplicationAdapter {
         elapsed+=dt;
         player.hitInvuln=Math.max(0,player.hitInvuln-dt);
         player.attackCd=Math.max(0,player.attackCd-dt);
-        player.attackFx=Math.max(0,player.attackFx-dt);
+        player.castFx=Math.max(0,player.castFx-dt);
+        player.healFx=Math.max(0,player.healFx-dt);
         player.magicCd=Math.max(0,player.magicCd-dt);
         player.healCd=Math.max(0,player.healCd-dt);
         player.mana=Math.min(100,player.mana+dt*12f);
-        PlayerCommand cmd=controls.read();
+        PlayerCommand cmd=controls.read(dt);
+        updateAim(cmd);
         player.moving=cmd.direction.len2()>.01f;
         player.running=player.moving && cmd.sprint && player.stamina>1;
         if(player.running) player.stamina=Math.max(0,player.stamina-38*dt);
         else player.stamina=Math.min(100,player.stamina+25*dt);
         if(player.moving) {
-            int fx=Math.abs(cmd.direction.x)>.45f ? (cmd.direction.x>0?3:2) : -1;
-            int fy=Math.abs(cmd.direction.y)>.45f ? (cmd.direction.y>0?1:0) : -1;
-            if(fx!=-1 && Math.abs(cmd.direction.x)>Math.abs(cmd.direction.y))player.facing=fx;
-            else if(fy!=-1) player.facing=fy;
             float speed=player.running?104:66;
+            if(mode==GameMode.REHABILITATION)speed=54;
             float nx=player.x+cmd.direction.x*speed*dt;
             player.x=dungeon.tryX(player.x,player.y,nx,5);
             float ny=player.y+cmd.direction.y*speed*dt;
             player.y=dungeon.tryY(player.x,player.y,ny,5);
             player.walk+=dt*(player.running?13:8);
         } else player.walk=0;
-        if(cmd.attack && player.attackCd<=0) attack();
-        if(cmd.magic && player.magicCd<=0 && player.mana>=25) shoot();
-        if(cmd.heal && player.healCd<=0 && player.heals>0 && player.hp<player.maxHp) {
+        if(cmd.cursorAim&&ui.blocksGameplayPointer()) {cmd.attack=false;cmd.magic=false;}
+        if(cmd.attack && player.attackCd<=0 && player.castFx<=0 && player.healFx<=0) attack();
+        if(cmd.magic && !swing.active() && player.healFx<=0 && player.magicCd<=0 && player.mana>=25) shoot();
+        if(cmd.heal && !swing.active() && player.castFx<=0 && player.healCd<=0 && player.heals>0 && player.hp<player.maxHp) {
             player.healCd=1.7f;player.heals--;player.hp=Math.min(player.maxHp,player.hp+2);
+            player.healFx=.45f;healsUsed++;
             burst(player.x,player.y,GREEN,11);
         }
+        if(swing.advance(dt))applyMeleeImpact();
+        updateFacing();
         updateEnemies(dt);
         updateSpells(dt);
+        resolveDeaths();
+        collectHearts();
+        for(int i=deaths.size-1;i>=0;i--) {DeathEcho death=deaths.get(i);death.life-=dt;if(death.life<=0)deaths.removeIndex(i);}
         for(int i=sparks.size-1;i>=0;i--) {
             Spark p=sparks.get(i);p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
             if(p.life<=0)sparks.removeIndex(i);
@@ -191,22 +232,28 @@ public final class MotionboundGame extends ApplicationAdapter {
     private void updateEnemies(float dt) {
         for(int i=enemies.size-1;i>=0;i--) {
             Enemy e=enemies.get(i);
+            if(e.hp<=0)continue;
             e.attackCd=Math.max(0,e.attackCd-dt);
             e.hitFlash=Math.max(0,e.hitFlash-dt);
             float dx=player.x-e.x,dy=player.y-e.y;
             float dist2=dx*dx+dy*dy;
-            if(dist2<150*150 && dist2>11*11) {
+            boolean recoiling=e.kickX*e.kickX+e.kickY*e.kickY>20*20;
+            if(!recoiling && dist2<150*150 && dist2>11*11) {
                 float length=(float)Math.sqrt(dist2);
-                float vx=dx/length*e.speed*dt,vy=dy/length*e.speed*dt;
+                float pace=mode==GameMode.REHABILITATION?.70f:1;
+                float vx=dx/length*e.speed*pace*dt,vy=dy/length*e.speed*pace*dt;
                 e.x=dungeon.tryX(e.x,e.y,e.x+vx,5);
                 e.y=dungeon.tryY(e.x,e.y,e.y+vy,5);
             }
-            if(dist2<14*14 && e.attackCd<=0 && player.hitInvuln<=0) {
+            e.x=dungeon.tryX(e.x,e.y,e.x+e.kickX*dt,5);
+            e.y=dungeon.tryY(e.x,e.y,e.y+e.kickY*dt,5);
+            float decay=(float)Math.exp(-10*dt);
+            e.kickX*=decay;e.kickY*=decay;
+            if(!recoiling && Vector2.dst2(player.x,player.y,e.x,e.y)<14*14 && e.attackCd<=0 && player.hitInvuln<=0) {
                 player.hp--;player.hitInvuln=.95f;e.attackCd=1.1f;
                 screenShake=1.8f;
                 burst(player.x,player.y,RED,8);
             }
-            if(e.hp<=0) {burst(e.x,e.y,GOLD,9);enemies.removeIndex(i);defeated++;}
         }
     }
     private void updateSpells(float dt) {
@@ -218,33 +265,87 @@ public final class MotionboundGame extends ApplicationAdapter {
             }
             boolean hit=false;
             for(Enemy e:enemies) {
+                if(e.hp<=0)continue;
                 if(Vector2.dst2(s.x,s.y,e.x,e.y)<12*12) {
-                    e.hp-=2;e.hitFlash=.16f;burst(e.x,e.y,ICE,8);hit=true;break;
+                    e.hp-=CombatRules.MAGIC_DAMAGE;e.hitFlash=.16f;
+                    tmp.set(s.vx,s.vy).nor().scl(CombatRules.MAGIC_KNOCKBACK);
+                    e.kickX=tmp.x;e.kickY=tmp.y;
+                    screenShake=.9f;burst(e.x,e.y,ICE,10);hit=true;break;
                 }
             }
             if(hit)spells.removeIndex(i);
         }
     }
     private void attack() {
-        player.attackCd=.34f;player.attackFx=.14f;
-        Vector2 dir=facingVector();
+        player.attackCd=MeleeSwing.COOLDOWN;swing.begin(aim);attacks++;
+    }
+    private void applyMeleeImpact() {
+        boolean hit=false;
         for(Enemy e:enemies) {
-            tmp.set(e.x-player.x,e.y-player.y);
-            if(tmp.len2()<27*27 && (tmp.len2()<3 || tmp.nor().dot(dir)>.12f)) {
+            if(e.hp>0&&CombatRules.inArc(e.x-player.x,e.y-player.y,swing.direction)
+                    &&CombatRules.clearPath(dungeon,player.x,player.y,e.x,e.y)) {
                 e.hp--;e.hitFlash=.18f;
+                e.kickX=swing.direction.x*60;e.kickY=swing.direction.y*60;hit=true;
                 burst(e.x,e.y,GOLD,5);
                 screenShake=.7f;
             }
         }
+        if(hit)hits++;
     }
     private void shoot() {
-        player.magicCd=.75f;player.mana-=25;
-        Vector2 dir=facingVector();
-        spells.add(new Spell(player.x+dir.x*10,player.y+dir.y*10,dir.x*170,dir.y*170));
+        player.magicCd=.75f;player.mana-=25;player.castFx=.32f;magicCasts++;
+        spells.add(new Spell(player.x+aim.x*10,player.y+aim.y*10,aim.x*170,aim.y*170));
         burst(player.x,player.y,ICE,5);
     }
-    private Vector2 facingVector() {
-        return switch(player.facing){case 1->new Vector2(0,1);case 2->new Vector2(-1,0);case 3->new Vector2(1,0);default->new Vector2(0,-1);};
+    private void setMode(GameMode next) {
+        mode=next;
+        controls=next==GameMode.CONVENTIONAL?new KeyboardControlSource():new SimulatedSensorSource();
+        cursorVisible=false;
+    }
+    private void updateAim(PlayerCommand command) {
+        cursorVisible=false;
+        if(command.cursorAim) {
+            float sx=command.aim.x,sy=Gdx.graphics.getHeight()-command.aim.y;
+            boolean inside=sx>=viewport.getScreenX()&&sx<viewport.getScreenX()+viewport.getScreenWidth()
+                    &&sy>=viewport.getScreenY()&&sy<viewport.getScreenY()+viewport.getScreenHeight();
+            if(inside&&!ui.blocksGameplayPointer()) {
+                cursorWorld.set(command.aim);viewport.unproject(cursorWorld);
+                tmp.set(cursorWorld).sub(player.x,player.y);
+                if(tmp.len2()>.5f)aim.set(tmp).nor();
+                cursorVisible=true;
+            } else {command.attack=false;command.magic=false;}
+        } else if(command.aim.len2()>.01f)aim.set(command.aim).nor();
+        if(command.assistedAim) {
+            Enemy target=null;float best=72*72;
+            for(Enemy enemy:enemies) {
+                if(enemy.hp<=0)continue;
+                tmp.set(enemy.x-player.x,enemy.y-player.y);float distance=tmp.len2();
+                if(distance<best&&distance>.01f&&tmp.nor().dot(aim)>.35f
+                        &&CombatRules.clearPath(dungeon,player.x,player.y,enemy.x,enemy.y)) {target=enemy;best=distance;}
+            }
+            if(target!=null)aim.set(target.x-player.x,target.y-player.y).nor();
+        }
+    }
+    private void updateFacing() {
+        Vector2 facing=swing.active()?swing.direction:aim;
+        player.facing=Math.abs(facing.x)>Math.abs(facing.y)?(facing.x>0?3:2):(facing.y>0?1:0);
+    }
+    private void resolveDeaths() {
+        for(int i=enemies.size-1;i>=0;i--) {
+            Enemy e=enemies.get(i);if(e.hp>0)continue;
+            burst(e.x,e.y,GOLD,9);deaths.add(new DeathEcho(e));enemies.removeIndex(i);defeated++;
+            if(shouldDropHeart(MathUtils.random()))hearts.add(new HeartDrop(e.x,e.y));
+        }
+    }
+    static boolean shouldDropHeart(float roll) {return roll>=0&&roll<.30f;}
+    private void collectHearts() {
+        if(player.hp<=0||player.hp>=player.maxHp)return;
+        for(int i=hearts.size-1;i>=0&&player.hp<player.maxHp;i--) {
+            HeartDrop heart=hearts.get(i);
+            if(Vector2.dst2(player.x,player.y,heart.x,heart.y)<=11*11) {
+                player.hp++;heartsCollected++;hearts.removeIndex(i);burst(player.x,player.y,GREEN,8);
+            }
+        }
     }
     private void burst(float x,float y,Color color,int count) {
         for(int i=0;i<count;i++) {
@@ -294,6 +395,16 @@ public final class MotionboundGame extends ApplicationAdapter {
         float bob=ready?MathUtils.sin(uiTime*3f):0;
         batch.draw(art.tile(ready?91:90),portalX-10,portalY-10+bob,20,20);
         batch.setColor(Color.WHITE);
+        for(HeartDrop heart:hearts) {
+            float floatY=MathUtils.sin(uiTime*3+heart.x)*1.2f;
+            batch.draw(art.heartTexture,heart.x-5,heart.y-3+floatY,10,10);
+        }
+        for(DeathEcho death:deaths) {
+            float progress=death.life/.28f,size=16*(.65f+.35f*progress);
+            batch.setColor(1,.78f,.55f,progress);
+            batch.draw(death.type==0?art.slime[0][0]:art.skeleton[0][0],death.x-size/2,death.y-6,size,size);
+        }
+        batch.setColor(Color.WHITE);
         for(Enemy e:enemies) {
             int frame=(int)(uiTime*(e.type==0?4:6))%4;
             TextureRegion spr=e.type==0?art.slime[0][frame]:art.skeleton[0][frame];
@@ -301,11 +412,42 @@ public final class MotionboundGame extends ApplicationAdapter {
             batch.draw(spr,e.x-8,e.y-6,16,16);
             batch.setColor(Color.WHITE);
         }
-        int row=player.facing,frame=player.moving ? (int)player.walk%4 : 0;
-        if(player.hitInvuln>0 && ((int)(uiTime*12))%2==0) batch.setColor(1,1,1,.35f);
-        batch.draw(art.hero[row][frame],player.x-8,player.y-6,16,16);
+        int pose=heroPose();
+        Vector2 direction=swing.active()?swing.direction:aim;
+        float lean=heroLean();
+        float px=player.x+direction.x*lean,py=player.y+direction.y*lean;
+        boolean weapon=player.castFx<=0&&player.healFx<=0;
+        float blade=swing.active()?swing.bladeAngle():aim.angleDeg()+35;
+        // Depth follows the body, so a raised blade cannot jump across the face mid-swing.
+        boolean behind=player.facing==1;
+        float opacity=player.hitInvuln>0&&((int)(uiTime*12))%2==0?.35f:1;
+        batch.setColor(1,1,1,opacity);
+        if(weapon&&behind)drawWeapon(px,py,blade,pose);
+        batch.draw(art.actions[player.facing][pose],px-16,py-13,32,32);
+        if(weapon&&!behind) {
+            drawWeapon(px,py,blade,pose);
+            GameAssets.SwordHand hand=art.swordHands[player.facing][pose];
+            // Restore the original palm/cuff over the handle to make the grip read as held.
+            batch.draw(hand.cover(),px+hand.x()-1.5f,py+hand.y()-1.5f,3,3);
+        }
         batch.setColor(Color.WHITE);
+        if(player.healFx>0)batch.draw(art.tile(115),px+1,py+5,8,8);
         batch.end();
+    }
+    private int heroPose() {
+        if(swing.active())return swing.pose();
+        if(player.castFx>0)return 6;
+        if(player.healFx>0)return 7;
+        return player.moving?switch((int)player.walk%4){case 0->1;case 2->2;default->0;}:0;
+    }
+    private float heroLean() {
+        return swing.active()?MathUtils.sin(swing.elapsed/MeleeSwing.DURATION*MathUtils.PI)*1.5f:0;
+    }
+    private void drawWeapon(float x,float y,float angle,int pose) {
+        GameAssets.SwordHand hand=art.swordHands[player.facing][pose];
+        // The rotation origin is the actual handle pixel, not the centre of the tile.
+        float gripX=7.5f,gripY=3.5f;
+        batch.draw(art.tile(103),x+hand.x()-gripX,y+hand.y()-gripY,gripX,gripY,16,16,1,1,angle-90);
     }
     private void drawGroundShadows() {
         shapes.setProjectionMatrix(worldCamera.combined);
@@ -315,6 +457,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         shapes.setColor(.025f,.035f,.06f,.30f);
         shapes.ellipse(player.x-7,player.y-7,14,5,20);
         for(Enemy enemy:enemies) shapes.ellipse(enemy.x-7,enemy.y-7,14,5,20);
+        for(HeartDrop heart:hearts)shapes.ellipse(heart.x-4,heart.y-4,8,3,12);
         shapes.end();Gdx.gl.glDisable(GL20.GL_BLEND);
     }
     private void drawWorldEffects() {
@@ -326,11 +469,44 @@ public final class MotionboundGame extends ApplicationAdapter {
         shapes.setColor(defeated==totalEnemies ? new Color(.25f,.98f,.75f,.3f) : new Color(.5f,.5f,.6f,.15f));
         shapes.rect(portalX-12,portalY-10,24,20);
         shapes.rect(portalX-10,portalY-12,20,24);
-        if(player.attackFx>0) {
-            Vector2 dir=facingVector();
-            shapes.setColor(new Color(1,.82f,.45f,Math.min(1,player.attackFx*6)));
-            float ax=player.x+dir.x*16,ay=player.y+dir.y*16;
-            shapes.rect(ax-7,ay-3,14,6);shapes.rect(ax-3,ay-7,6,14);
+        if(swing.trail()>0) {
+            float angle=swing.bladeAngle();
+            GameAssets.SwordHand hand=art.swordHands[player.facing][heroPose()];
+            float hx=player.x+swing.direction.x*heroLean()+hand.x();
+            float hy=player.y+swing.direction.y*heroLean()+hand.y();
+            for(int i=0;i<9;i++) {
+                float a=angle+i*5,alpha=swing.trail()*(1-i/10f);
+                shapes.setColor(1,.76f,.34f,alpha*.65f);
+                for(int radius=9;radius<=13;radius+=2)
+                    shapes.rect(Math.round(hx+MathUtils.cosDeg(a)*radius),Math.round(hy+MathUtils.sinDeg(a)*radius),2,2);
+                shapes.setColor(1,.96f,.76f,alpha);
+                shapes.rect(Math.round(hx+MathUtils.cosDeg(a)*13),Math.round(hy+MathUtils.sinDeg(a)*13),2,2);
+            }
+        }
+        if(player.castFx>0) {
+            float cx=player.x+aim.x*9,cy=player.y+5+aim.y*7;
+            shapes.setColor(ICE);shapes.rect(cx-3,cy-1,6,2);shapes.rect(cx-1,cy-3,2,6);
+            shapes.setColor(Color.WHITE);shapes.rect(cx-1,cy-1,2,2);
+        }
+        if(player.healFx>0) {
+            shapes.setColor(GREEN);
+            float rising=(1-player.healFx/.45f)*12;
+            for(int i=-1;i<=1;i++) {
+                float x=player.x+i*7,y=player.y+5+rising-Math.abs(i)*3;
+                shapes.rect(x-2,y,5,1);shapes.rect(x,y-2,1,5);
+            }
+        }
+        if(scene==Screen.PLAYING) {
+            Vector2 direction=swing.active()?swing.direction:aim;
+            shapes.setColor(mode==GameMode.CONVENTIONAL?GOLD:GREEN);
+            float tx=player.x+direction.x*22,ty=player.y+direction.y*22;
+            shapes.rect(Math.round(tx),Math.round(ty),2,2);
+            if(cursorVisible&&mode==GameMode.CONVENTIONAL) {
+                float cx=Math.round(cursorWorld.x),cy=Math.round(cursorWorld.y);
+                for(int dx:new int[]{-4,2})for(int dy:new int[]{-4,2}) {
+                    shapes.rect(cx+dx,cy+dy,2,1);shapes.rect(cx+dx,cy+dy,1,2);
+                }
+            }
         }
         for(Spell s:spells) {
             shapes.setColor(new Color(.12f,.43f,1f,.35f));shapes.rect(s.x-5,s.y-3,10,6);shapes.rect(s.x-3,s.y-5,6,10);
@@ -344,7 +520,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         for(Enemy e:enemies) {
             if(e.hp<e.maxHp) {
                 shapes.setColor(.14f,.11f,.18f,.9f);shapes.rect(e.x-8,e.y+10,16,3);
-                shapes.setColor(RED);shapes.rect(e.x-8,e.y+10,16f*e.hp/e.maxHp,3);
+                shapes.setColor(RED);shapes.rect(e.x-8,e.y+10,16f*Math.max(0,e.hp)/e.maxHp,3);
             }
         }
         shapes.end();Gdx.gl.glDisable(GL20.GL_BLEND);
@@ -396,16 +572,26 @@ public final class MotionboundGame extends ApplicationAdapter {
         data.facing=player.facing;data.stamina=player.stamina;data.mana=player.mana;
         data.elapsed=elapsed;data.defeated=defeated;data.hitInvuln=player.hitInvuln;
         data.attackCd=player.attackCd;data.magicCd=player.magicCd;data.healCd=player.healCd;
+        data.mode=mode;data.simulatedSensors=mode==GameMode.REHABILITATION;data.aimX=aim.x;data.aimY=aim.y;
+        data.swingTime=swing.elapsed;data.swingX=swing.direction.x;data.swingY=swing.direction.y;
+        data.swingImpacted=swing.impacted;data.castFx=player.castFx;data.healFx=player.healFx;
+        data.attacks=attacks;data.hits=hits;data.magicCasts=magicCasts;data.healsUsed=healsUsed;data.heartsCollected=heartsCollected;
+        if(controls instanceof SimulatedSensorSource simulated) {
+            data.pressureSeconds=simulated.sensors.pressureSeconds;data.pressureInBandSeconds=simulated.sensors.pressureInBandSeconds;
+        }
         for(Enemy enemy:enemies) {
             if(enemy.hp<=0) { data.defeated++;continue; }
             SaveData.EnemyData saved=new SaveData.EnemyData();
             saved.x=enemy.x;saved.y=enemy.y;saved.hp=enemy.hp;saved.type=enemy.type;
-            saved.attackCd=enemy.attackCd;data.enemies.add(saved);
+            saved.attackCd=enemy.attackCd;saved.kickX=enemy.kickX;saved.kickY=enemy.kickY;data.enemies.add(saved);
         }
         for(Spell spell:spells) {
             SaveData.SpellData saved=new SaveData.SpellData();
             saved.x=spell.x;saved.y=spell.y;saved.vx=spell.vx;saved.vy=spell.vy;saved.life=spell.life;
             data.spells.add(saved);
+        }
+        for(HeartDrop heart:hearts) {
+            SaveData.HeartData saved=new SaveData.HeartData();saved.x=heart.x;saved.y=heart.y;data.hearts.add(saved);
         }
         return data;
     }
@@ -421,23 +607,31 @@ public final class MotionboundGame extends ApplicationAdapter {
     private void loadGame() {
         try {
             SaveData data=SaveData.read(saveFile);
+            setMode(data.mode);
             resetWorld();
             player.x=data.x;player.y=data.y;player.hp=data.hp;player.heals=data.heals;
             player.facing=data.facing;player.stamina=data.stamina;player.mana=data.mana;
             player.hitInvuln=data.hitInvuln;player.attackCd=data.attackCd;
             player.magicCd=data.magicCd;player.healCd=data.healCd;
+            aim.set(data.aimX,data.aimY);swing.elapsed=data.swingTime;swing.direction.set(data.swingX,data.swingY);swing.impacted=data.swingImpacted;
+            player.castFx=data.castFx;player.healFx=data.healFx;
+            attacks=data.attacks;hits=data.hits;magicCasts=data.magicCasts;healsUsed=data.healsUsed;heartsCollected=data.heartsCollected;
+            if(controls instanceof SimulatedSensorSource simulated) {
+                simulated.sensors.pressureSeconds=data.pressureSeconds;simulated.sensors.pressureInBandSeconds=data.pressureInBandSeconds;
+            }
             elapsed=data.elapsed;defeated=data.defeated;
             enemies.clear();
             for(SaveData.EnemyData saved:data.enemies) {
                 Enemy enemy=new Enemy(saved.x,saved.y,saved.type);
-                enemy.hp=saved.hp;enemy.attackCd=saved.attackCd;enemies.add(enemy);
+                enemy.hp=saved.hp;enemy.attackCd=saved.attackCd;enemy.kickX=saved.kickX;enemy.kickY=saved.kickY;enemies.add(enemy);
             }
             for(SaveData.SpellData saved:data.spells) {
                 Spell spell=new Spell(saved.x,saved.y,saved.vx,saved.vy);
                 spell.life=saved.life;spells.add(spell);
             }
+            for(SaveData.HeartData saved:data.hearts)hearts.add(new HeartDrop(saved.x,saved.y));
             worldCamera.position.set(player.x,player.y,0);updateCamera(1);
-            message="";scene=Screen.PLAYING;
+            controls.reset();message="";scene=Screen.PLAYING;
         } catch(RuntimeException e) {
             hasSave=false;
             message="O save não pôde ser lido. Você pode iniciar uma nova aventura.";
@@ -445,7 +639,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         }
     }
     @Override public void pause() {
-        if(scene==Screen.PLAYING) scene=Screen.PAUSED;
+        if(scene==Screen.PLAYING) {scene=Screen.PAUSED;controls.reset();}
     }
     @Override public void resize(int width,int height) {
         if(width<=0||height<=0)return;

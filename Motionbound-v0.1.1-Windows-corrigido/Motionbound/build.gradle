@@ -83,7 +83,15 @@ tasks.register('verifySave', JavaExec) {
     doFirst { args layout.buildDirectory.get().asFile.absolutePath }
 }
 
-tasks.named('check') { dependsOn 'verifySave' }
+tasks.register('verifyCombat', JavaExec) {
+    group = 'verification'
+    description = 'Verify free-aim melee geometry, swing timing and the sensor input pipeline.'
+    dependsOn verificationClasses
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'br.edu.motionbound.CombatRulesTest'
+}
+
+tasks.named('check') { dependsOn 'verifySave', 'verifyCombat' }
 
 tasks.register('verifyDesktop', JavaExec) {
     group = 'verification'

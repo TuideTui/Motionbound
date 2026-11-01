@@ -15,6 +15,18 @@ public final class GameAssets implements Disposable {
     public final Texture slimeTexture;
     public final Texture skeletonTexture;
     public final Texture glow;
+    public final Texture actionsTexture, heartTexture;
+    public final TextureRegion[][] actions;
+    public final TextureRegion heroPortrait;
+    /** Pixel-aligned palm positions in each of the six armed poses; rows match the hero atlas. */
+    private static final int[][] SWORD_GRIPS={
+        {21,20, 21,19, 20,19, 21,19, 23,17, 19,19},
+        {11,20, 11,18, 11,19, 10,12, 8,16, 12,19},
+        {13,20, 11,18, 10,18, 13,19, 8,17, 12,19},
+        {19,20, 20,18, 20,18, 18,19, 23,17, 20,18}
+    };
+    public record SwordHand(float x,float y,TextureRegion cover) { }
+    public final SwordHand[][] swordHands=new SwordHand[4][6];
     private final Texture townTexture, detailsTexture;
     public final TextureRegion[][] hero, slime, skeleton;
     public final boolean usingKenney;
@@ -34,6 +46,25 @@ public final class GameAssets implements Disposable {
         slimeTexture=texture("characters/slime.png");
         skeletonTexture=texture("characters/skeleton.png");
         hero=TextureRegion.split(heroTexture,16,16);
+        actionsTexture=texture("characters/hero-actions.png");
+        actions=TextureRegion.split(actionsTexture,32,32);
+        for(int facing=0;facing<4;facing++)for(int pose=0;pose<6;pose++) {
+            int x=SWORD_GRIPS[facing][pose*2],y=SWORD_GRIPS[facing][pose*2+1];
+            swordHands[facing][pose]=new SwordHand(x+.5f-16,18.5f-y,
+                    new TextureRegion(actions[facing][pose],x-1,y-1,3,3));
+        }
+        heroPortrait=new TextureRegion(actions[0][0],8,5,18,21);
+        Pixmap heart=new Pixmap(10,10,Pixmap.Format.RGBA8888);
+        String[] heartRows={"  rr  rr  "," rRRrrRrr ","rRRRrrrrrr","rrrrrrrrrr"," rrrrrrrr ","  rrrrrr  ","   rrrr   ","    rr    "};
+        for(int y=0;y<heartRows.length;y++)for(int x=0;x<10;x++)if(heartRows[y].charAt(x)!=' ') {
+            heart.setColor(Color.valueOf("392332"));
+            if(y+2<10)heart.drawPixel(x,y+2);
+        }
+        for(int y=0;y<heartRows.length;y++)for(int x=0;x<10;x++)if(heartRows[y].charAt(x)!=' ') {
+            heart.setColor(Color.valueOf(heartRows[y].charAt(x)=='R'?"ff9ba2":"d24e68"));heart.drawPixel(x,y+1);
+        }
+        heartTexture=new Texture(heart);heart.dispose();
+        heartTexture.setFilter(Texture.TextureFilter.Nearest,Texture.TextureFilter.Nearest);
         slime=TextureRegion.split(slimeTexture,16,16);
         skeleton=TextureRegion.split(skeletonTexture,16,16);
         townTexture=texture("kenney/tiny-town/tilemap_packed.png");
@@ -92,5 +123,6 @@ public final class GameAssets implements Disposable {
     @Override public void dispose() {
         tilesTexture.dispose();heroTexture.dispose();slimeTexture.dispose();skeletonTexture.dispose();
         townTexture.dispose();detailsTexture.dispose();glow.dispose();
+        actionsTexture.dispose();heartTexture.dispose();
     }
 }
