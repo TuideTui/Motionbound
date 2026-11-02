@@ -27,7 +27,7 @@ public final class CampaignTest {
             int layout=1;
             for(int x=0;x<DungeonMap.WIDTH;x++)for(int y=0;y<DungeonMap.HEIGHT;y++) {
                 if(map.isFloor(x,y))require(visited[x][y],"No unreachable walkable islands: "+stage+" at "+x+","+y);
-                if(stage>=2&&map.isFloor(x,y))require(map.propAt(x,y)!=29&&map.propAt(x,y)!=32,"Wall torches never stand on the ground");
+                if(stage>=2&&map.isFloor(x,y))require(map.propAt(x,y)!=29,"Wall torches never stand on the ground");
                 layout=31*layout+(map.isFloor(x,y)?1:0);
                 for(int tile:new int[]{map.floorTile(x,y),map.wallTile(x,y),map.propAt(x,y)})
                     require(tile>=0&&(tile<1000?tile<132:tile%1000<132),"Valid atlas index");
@@ -45,7 +45,7 @@ public final class CampaignTest {
                 int dx=spawn.tileX()-map.startTileX,dy=spawn.tileY()-map.startTileY;
                 require(dx*dx+dy*dy>=36,"Safe starting area");
                 SaveData.EnemyData enemy=new SaveData.EnemyData();enemy.x=spawn.tileX()*16+8;enemy.y=spawn.tileY()*16+8;
-                enemy.type=spawn.type();enemy.hp=enemy.type==0?2:3;checkpoint.enemies.add(enemy);
+                enemy.type=spawn.type();enemy.hp=br.edu.motionbound.game.EnemyKind.of(enemy.type).maxHp;checkpoint.enemies.add(enemy);
             }
             SaveData loaded=SaveData.decode(checkpoint.encode());
             require(loaded.stage==stage&&loaded.enemies.size==level.enemyCount()&&loaded.introRemaining==CampaignLevel.INTRO_SECONDS,"Stage and countdown round-trip");

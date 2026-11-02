@@ -18,6 +18,7 @@ public final class DungeonMap {
     private final int[][] floor = new int[WIDTH][HEIGHT];
     private final int[][] props = new int[WIDTH][HEIGHT];
     private final int[][] ground = new int[WIDTH][HEIGHT];
+    private final int[][] masonry = new int[WIDTH][HEIGHT];
 
     public DungeonMap() {this(1);}
     public DungeonMap(int stage) {
@@ -26,7 +27,7 @@ public final class DungeonMap {
         startTileY=stage==1?8:stage==3?7:stage==4?5:6;
         exitTileX=stage==2||stage==3?48:47;
         exitTileY=stage==1||stage==3?27:stage==4?29:28;
-        int[][] wallLights=stage==1?TORCHES:stage==5?new int[][]{{6,14,0},{16,14,0},{24,13,0},{48,13,0},{10,32,1},{30,32,1},{48,32,1},{24,20,0}}
+        int[][] wallLights=stage==1?TORCHES:stage==5?new int[][]{{9,23,0},{17,23,0},{26,24,0},{32,24,0},{7,12,0},{46,13,0},{45,32,0}}
                 :new int[0][];
         switch(level.theme()) {
             case CRYPT -> crypt();
@@ -169,12 +170,36 @@ public final class DungeonMap {
             if(!isFloor(x,y)&&Math.floorMod(x*19+y*7,5)==0)prop(x,y,SKI+6);
     }
     private void fortress() {
-        room(3,3,17,13);room(22,3,50,12);room(3,18,20,31);room(25,17,51,31);
-        room(15,7,25,10);room(10,11,13,20);room(18,23,28,26);room(39,10,42,20);room(21,12,34,20);
-        for(int x:new int[]{28,34,45}) {obstacle(x,7,65);obstacle(x,25,65);}
-        for(int y:new int[]{20,27}) {obstacle(8,y,54);obstacle(9,y,55);}
-        prop(6,5,82);prop(15,5,82);prop(27,18,64);prop(31,18,74);
-        prop(45,29,54);prop(46,29,55);prop(49,29,75);prop(49,19,66);
+        room(3,3,51,31);
+        // Closed ruined structures shape connected sandy courtyards, instead of repeating the crypt's rooms.
+        ruin(5,23,19,31,12);ruin(23,24,35,31,29);
+        ruin(3,12,13,19,8);ruin(13,3,22,9,17);
+        ruin(28,3,38,10,33);ruin(42,13,51,24,46);
+        // Training courtyard, clear firing lanes and a ceremonial stair to the northern cemetery.
+        for(int x:new int[]{17,20,23}) {prop(x,19,66);prop(x,18,63);}
+        for(int y=13;y<=17;y++)prop(15,y,76);
+        for(int x=41;x<=50;x++)ground[x][26]=36+(x==41?0:x==50?2:1);
+        for(int x:new int[]{42,45,48}) {obstacle(x,30,64);obstacle(x,27,65);}
+        prop(43,29,31);prop(49,29,32);prop(50,28,75);
+        // Alchemists' workstations are backed by the workshop facade, away from its walking route.
+        for(int x=25;x<=33;x+=4) {
+            prop(x,22,72);prop(x+1,22,73);prop(x,23,115);prop(x+1,23,114);
+        }
+        prop(37,22,113);prop(38,22,116);prop(36,20,82);
+        prop(6,5,82);prop(10,5,82);prop(11,20,74);prop(38,15,64);prop(40,15,65);
+        prop(24,6,54);prop(25,6,55);prop(40,7,75);
+        for(int x=6;x<=40;x+=3)ground[x][11]=42;
+        for(int y=14;y<=26;y+=3)ground[39][y]=42;
+        for(int x=16;x<=39;x+=3)ground[x][21]=42;
+    }
+    private void ruin(int left,int bottom,int right,int top,int doorX) {
+        for(int x=left;x<=right;x++)for(int y=bottom;y<=top;y++) {
+            floor[x][y]=0;
+            if(y==top)masonry[x][y]=x==left?4:x==right?6:5;
+            else if(y==bottom)masonry[x][y]=x==left?28:x==right?30:40;
+            else if(x==left||x==right)masonry[x][y]=40;
+        }
+        prop(doorX,bottom,45);
     }
     private void field(int x0,int y0,int x1,int y1,int crop) {
         for(int x=x0;x<=x1;x++)for(int y=y0;y<=y1;y++) {
@@ -224,6 +249,7 @@ public final class DungeonMap {
         return ((x*43+y*79+x*y*13)%17)==1;
     }
     public int floorTile(int x,int y) {
+        if(level.number()==5)return ground[x][y]!=0?ground[x][y]:49;
         if(level.theme()==CampaignLevel.Theme.SNOW)return SKI+(Math.floorMod(x*17+y*29,19)==0?1:0);
         if(level.theme()==CampaignLevel.Theme.VILLAGE)
             return ground[x][y]!=0?ground[x][y]:TOWN+(Math.floorMod(x*29+y*17,13)==0?1:0);
@@ -235,6 +261,13 @@ public final class DungeonMap {
     public int wallTile(int x,int y) {
         if(outdoors())return level.theme()==CampaignLevel.Theme.SNOW?SKI:TOWN;
         for(int[] torch:torches) if(torch[0]==x&&torch[1]==y) return torch[2]==0?29:32;
+        if(level.number()==5) {
+            if(masonry[x][y]!=0)return masonry[x][y];
+            if(isFloor(x,y-1))return 5;
+            if(isFloor(x-1,y)||isFloor(x+1,y))return 40;
+            if(isFloor(x,y+1))return 40;
+            return Math.floorMod(x*17+y*29,41)==0?12:0;
+        }
         if(isFloor(x,y-1)) {
             if(Math.floorMod(x*7+y,13)==0)return 19;
             if(y>18&&Math.floorMod(x*3+y,9)==0)return 20;
@@ -246,7 +279,7 @@ public final class DungeonMap {
     }
     public boolean overgrown(int x,int y) { return level.number()==1&&x>=3&&x<=26&&y>=18&&y<=31; }
     public boolean carpet(int x,int y) {
-        if(level.number()==5)return x>=36&&x<=48&&y>=27&&y<=29;
+        if(level.number()==5)return false;
         if(level.number()!=1)return false;
         return (x>=8&&x<=11&&y>=6&&y<=9)||(x>=43&&x<=48&&y>=24&&y<=28);
     }

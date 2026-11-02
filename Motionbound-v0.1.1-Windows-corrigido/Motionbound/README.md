@@ -70,21 +70,52 @@ A espada alcança **32,2 unidades** em um arco de 120 graus, um aumento de 15% s
 
 A magia causa **1 de dano** (antes, 2) e empurra o alvo na direção do projétil. Durante o recuo, o inimigo interrompe a perseguição e o ataque de contato; o deslocamento respeita as paredes. O custo continua sendo 25 de mana.
 
-Cada inimigo derrotado tem **30% de chance de deixar um coração no chão**. A coleta recupera **1 coração perdido**, até o limite atual de 6; ela não aumenta a vida máxima. Com vida cheia, o item permanece no chão. Corações e ataques em andamento são preservados no salvamento. Saves dos formatos 1 e 2 continuam na cripta da fase 1; saves do formato 3 mantêm a fase e o progresso. Todos são convertidos para o formato 4 no próximo salvamento. Na vila reformulada, posições antigas que coincidam com construções ou árvores são transferidas para o chão livre mais próximo, preservando vida, recursos e inimigos derrotados. Existe um único espaço de save: iniciar outro modo não apaga o anterior, mas **Salvar e sair** o substitui.
+### Inimigos, frascos e efeitos
+
+Os inimigos avisam seus ataques por uma preparação animada, medidor e marcas no chão. Golpes de espada e magia interrompem essa preparação por meio do recuo. Uma navegação compartilhada permite contornar casas e paredes.
+
+| Inimigo | Comportamento |
+| --- | --- |
+| Slime | Prepara e executa um salto curto. |
+| Esqueleto | Prepara um golpe frontal; sair do alcance permite desviar. |
+| Mago roxo | Dois frascos de veneno, depois cinco raios em um leque de 45°. A direção fica fixa durante a sequência. |
+| Bruxo encapuzado | Usa lentidão seguida de três frascos de fogo em um leque de 45°. Quando o jogador se aproxima, contra-ataca com um frasco cinza rápido. |
+| Ciclope | Tem 4 pontos de vida e prepara um impacto circular mais lento. |
+| Fantasma | Nas fases 4 e 5, lança um frasco azul. Depois, flutua e desfere investidas de meio coração. |
+| Morcego | É invocado pela fenda, bate asas e prepara um mergulho; tem 1 ponto de vida. |
+
+| Frasco | Efeito ao atingir a área marcada |
+| --- | --- |
+| Vermelho | Área de chamas e brasas por **5 segundos**. Queimadura: 4 pulsos de **meio coração**, um por segundo; total de **2 corações**. |
+| Verde | Poça verde brilhante e borbulhante por **5 segundos**. Veneno: a mesma dose de 4 pulsos e 2 corações. |
+| Cinza | Névoa cinza por **5 segundos**. Lentidão por 4 segundos, com velocidade reduzida para 60%. |
+| Azul | Redemoinho azul com partículas atraídas ao centro por **5 segundos**. Teleporte para uma área livre e **3 morcegos na primeira ativação**. |
+
+Os frascos têm trajetória em arco, aviso do local de queda, animação de quebra e partículas. **Todos deixam uma pequena área por 5 segundos, mesmo no impacto direto no jogador.** O impacto aplica o efeito; depois, atravessar a área também pode aplicá-lo. Veneno, queimadura e lentidão não reiniciam enquanto estão ativos; podem ser adquiridos novamente quando terminam, se a área ainda existir. A duração da área é independente da duração do estado adquirido: sair dela ou vê-la desaparecer não cancela a dose. Fogo e veneno não acumulam entre si. A cura remove ambos; saia da área antes de usá-la para evitar uma nova dose.
+
+O contra-ataque cinza do bruxo viaja em linha direta e pode acertar durante o voo: desviar para o lado ajuda a escapar. O HUD mostra meios corações, nome do estado e tempo restante. A pausa congela efeitos, áreas, suas animações, frascos e raios. As áreas respeitam as paredes e são preservadas no salvamento. A magia pode interromper a preparação e a sequência de raios com seu knockback.
+
+O **fantasma recebe o frasco azul nas fases 4 e 5**, com uma tentativa por fantasma e até duas tentativas de fenda por fase, no máximo seis morcegos adicionais. Depois do arremesso, volta ao combate próximo. O redemoinho pode teleportar novamente após a chegada e sua proteção breve; cada fenda invoca seus três morcegos apenas na primeira ativação. Assim, voltar ao mesmo redemoinho continua perigoso sem gerar ondas infinitas. Os morcegos só agem após sua animação de aparição, entram na contagem necessária para liberar a saída e não deixam corações. Os primeiros mapas introduzem as criaturas gradualmente; a fase final combina os tipos. **Esc > Bestiário > Frascos** explica as áreas, durações e regras de reaplicação.
+
+Cada guardião derrotado tem **30% de chance de deixar um coração no chão**; os morcegos invocados não deixam itens. A coleta recupera **1 coração perdido**, até o limite atual de 6; ela não aumenta a vida máxima. Com vida cheia, o item permanece no chão. Corações, ataques, preparações dos inimigos, frascos em voo, raios, sequência de disparos, fogo no chão, efeitos e invocações são preservados no salvamento. Saves dos formatos 1 e 2 continuam na cripta da fase 1; saves dos formatos 3, 4, 5 e 6 mantêm a fase e o progresso. Todos são convertidos para o formato 7 no próximo salvamento. Na vila e na fortaleza reformuladas, posições antigas que coincidam com construções são transferidas para o chão livre mais próximo. Vida, recursos e inimigos derrotados são preservados. Existe um único espaço de save: iniciar outro modo não apaga o anterior, mas **Salvar e sair** o substitui.
 
 ### Experimentar e comparar
+
+**Esc > Tutorial** apresenta duas abas independentes: **Modo Convencional** e **Modo Reabilitação**. As teclas e os botões do mouse usam os ícones oficiais do [Kenney Input Prompts Pixel](https://kenney.nl/assets/input-prompts-pixel), incluídos no projeto com sua licença CC0. A aba de reabilitação ilustra inclinação, movimentos laterais e aperto, e explica os comandos da simulação atual. Ler outra aba não altera o modo da partida. USB, calibração e gestos para magia/cura continuam em preparação.
+
+**Esc > Bestiário** separa **Bestiário** e **Frascos** em catálogos. Cada uma das sete criaturas e dos quatro frascos tem uma ficha **Saiba mais**, com comportamento, dano/duração e estratégias. Clique nos cartões ou navegue com **Tab / Cima / Baixo** e confirme com **Enter**. **Esquerda / Direita** troca a aba; **Esc** fecha a ficha, depois volta ao resumo da expedição. A aventura permanece pausada durante a leitura.
 
 Use `iniciar-jogo.bat` para a implementação atual. O trabalho está na branch local `experimento/combate-mira`; commits e push são feitos manualmente pelo aluno. A `main` mantém o histórico anterior, mas alterações sem commit acompanham a troca de branch; trocar de branch sozinho não desfaz a experiência.
 
 Neste computador, `comparar-versao-anterior.bat` executa a cópia anterior preservada em `build/rollback/Motionbound-antes-combate.jar`. Também foram preservados o checkpoint anterior em `build/rollback/expedition-antes-combate.json` e o JAR imediatamente anterior à campanha em `build/rollback/Motionbound-antes-fases.jar`. O iniciador de comparação não restaura nem modifica os arquivos do projeto. O jogo antigo não lê os novos formatos de save: para comparar, inicie uma nova partida e feche a janela sem salvar. A pasta `build/` é local, ignorada pelo Git e removida por `gradle clean`; preserve essas cópias antes de limpar o build.
 
-Para verificar combate, salvamento e conectividade dos cinco mapas, execute `gradle check`. `gradle verifyDesktop` abre brevemente o jogo, verifica os controles, a contagem regressiva, as cinco transições, derrota/reinício e continuação de saves. Grava capturas em `build/review/`, usando saves de teste separados do seu checkpoint. `gradle fatJar` gera o executável com todos os recursos.
+Para verificar combate, efeitos, navegação, salvamento e conectividade dos cinco mapas, execute `gradle check`. `gradle verifyDesktop` abre brevemente o jogo e verifica também os frascos, doses, pausa, teleporte, invocações, contagem regressiva, transições, derrota e continuação de saves. Grava capturas em `build/review/`, usando saves de teste separados do seu checkpoint. `gradle fatJar` gera o executável com todos os recursos.
 
 **Objetivo da campanha:** derrotar todos os guardiões de cada mapa e alcançar o baú da saída, marcado no minimapa. O baú só libera a próxima fase quando todos os inimigos caem. Após a fase 5, aparece a vitória da campanha.
 
 **Sem Arduino por enquanto:** esta é uma versão provisória de desenvolvimento, com seleção de modo e simulação de sensores. A estrutura `ControlSource` recebe comandos do teclado/mouse ou de amostras normalizadas; o transporte USB e a calibração real ainda faltam. A versão apresentada como jogo sério para avaliação do professor deverá funcionar com o dispositivo IoT.
 
-**Assets:** os cenários misturam Tiny Dungeon, Tiny Town, Tiny Farm e Tiny Ski (16×16, CC0). Do Ski são usados neve, pinheiros e os números 1, 2 e 3 da contagem regressiva; equipamentos esportivos e veículos não fazem parte da aventura. Slimes, esqueletos e detalhes complementares da interface são originais do projeto; o herói é arte gerada com IA, documentada em `art-source/`.
+**Assets:** os cenários misturam Tiny Dungeon, Tiny Town, Tiny Farm e Tiny Ski (16×16, CC0). Os novos inimigos e frascos usam os sprites oficiais do Tiny Dungeon, com animações de preparação, flutuação, salto, arremesso e asas feitas em código. Do Ski são usados neve, pinheiros e os números 1, 2 e 3 da contagem regressiva. Slimes, esqueletos e detalhes complementares da interface são originais do projeto; o herói é arte gerada com IA, documentada em `art-source/`.
 
 ## 📌 Informações do projeto
 
@@ -192,7 +223,7 @@ Antes de definir os valores de ativação, será criada uma etapa de **calibraç
 | **2** | Vila das Lanternas | Moderado | 10 | Casas com janelas e chaminés, praça de pedra, jardins, poço, apiário cercado, moradores decorativos e portaria com torres. |
 | **3** | Campos Corrompidos | Intermediário | 14 | Lavouras, celeiro, casa, recipientes e cercas com Tiny Farm e Town. |
 | **4** | Passagem Congelada | Difícil | 18 | Caminho em patamares, pinheiros, neve e flocos animados do Tiny Ski. |
-| **5** | Fortaleza do Crepúsculo | Muito difícil | 22 | Salões e corredores conectados, lápides, mobiliário e tapete cerimonial. |
+| **5** | Fortaleza do Crepúsculo | Muito difícil | 22 | Pátios de areia entre ruínas com muralhas, laboratório, treinamento e cemitério elevado. |
 
 Cada entrada mostra **Fase N - Nível ...** e o nome do mapa com a fonte pixelada da interface. A contagem **3, 2, 1** usa os próprios sprites do Tiny Ski, ampliados sem suavização. Durante a apresentação, personagens, combate e cronômetro ficam parados. `Esc` pausa a apresentação e retoma de onde parou.
 
@@ -202,7 +233,7 @@ Ao concluir uma etapa, o jogador pode descansar, **seguir para a próxima fase**
 
 O save em `%USERPROFILE%\.motionbound\saves\expedition.json` preserva número da fase, mapa, inimigos, corações, recursos, combate, tempo restante da apresentação e conclusão da etapa. Um save na tela de conclusão volta para essa tela, permitindo seguir sem repetir a fase. O salvamento é acionado pelo jogador em **Salvar e sair**, na pausa ou entre fases.
 
-A dificuldade aumenta pela quantidade de guardiões, maior presença de esqueletos e disposição dos caminhos. Os controles, o dano dos inimigos e os limiares de entrada permanecem iguais. O modo reabilitação usa a mesma campanha, com mira assistida e ritmo reduzido; o terreno nevado é visual, sem exigir gestos extras ou controle de escorregamento.
+A dificuldade aumenta pela quantidade e variedade de guardiões e pela disposição dos caminhos. O modo reabilitação usa a mesma campanha, com mira assistida, inimigos mais lentos, preparações mais longas e frascos com voo mais demorado. Os limiares de entrada dos sensores permanecem iguais; a neve é visual, sem exigir gestos extras ou controle de escorregamento.
 
 ## 📊 Métricas de desempenho
 

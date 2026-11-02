@@ -18,6 +18,7 @@ public final class GameAssets implements Disposable {
     public final Texture actionsTexture, heartTexture;
     public final TextureRegion[][] actions;
     public final TextureRegion heroPortrait;
+    public final TextureRegion batLeft,batBody,batRight;
     /** Pixel-aligned palm positions in each of the six armed poses; rows match the hero atlas. */
     private static final int[][] SWORD_GRIPS={
         {21,20, 21,19, 20,19, 21,19, 23,17, 19,19},
@@ -42,6 +43,8 @@ public final class GameAssets implements Disposable {
         tilesTexture.setFilter(Texture.TextureFilter.Nearest,Texture.TextureFilter.Nearest);
         tiles=TextureRegion.split(tilesTexture,16,16);
         cols=tiles[0].length;
+        TextureRegion bat=tile(120);
+        batLeft=new TextureRegion(bat,0,0,5,16);batBody=new TextureRegion(bat,5,0,6,16);batRight=new TextureRegion(bat,11,0,5,16);
         heroTexture=texture("characters/hero.png");
         slimeTexture=texture("characters/slime.png");
         skeletonTexture=texture("characters/skeleton.png");
@@ -123,6 +126,13 @@ public final class GameAssets implements Disposable {
         return atlas[local/atlas[0].length][local%atlas[0].length];
     }
     public TextureRegion detail(int index) {return details[index];}
+    public TextureRegion enemy(int type,int frame) {
+        return switch(EnemyKind.of(type)) {
+            case SLIME -> slime[0][frame%4];case SKELETON -> skeleton[0][frame%4];
+            case MAGE -> tile(84);case WARLOCK -> tile(111);case CYCLOPS -> tile(109);
+            case GHOST -> tile(108);case BAT -> tile(120);
+        };
+    }
     public TextureRegion countdownDigit(int digit) {
         if(digit<1||digit>3)throw new IllegalArgumentException("Countdown digit must be 1, 2 or 3");
         return prop(DungeonMap.SKI+84+digit);

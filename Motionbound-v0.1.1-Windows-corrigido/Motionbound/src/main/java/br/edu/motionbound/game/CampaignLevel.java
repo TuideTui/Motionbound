@@ -40,9 +40,24 @@ public record CampaignLevel(int number,String title,String difficulty,int enemyC
                 int dx=candidate.tileX()-other.tileX(),dy=candidate.tileY()-other.tileY();
                 if(dx*dx+dy*dy<9){separated=false;break;}
             }
-            if(separated)selected.add(new Spawn(candidate.tileX(),candidate.tileY(),selected.size()%5<(number-1)?1:0));
+            if(separated)selected.add(new Spawn(candidate.tileX(),candidate.tileY(),enemyType(selected.size())));
         }
         if(selected.size()!=enemyCount)throw new IllegalStateException("Sem espaço para os inimigos da fase "+number);
         return List.copyOf(selected);
+    }
+    private int enemyType(int index) {
+        if(number==2&&index==3)return EnemyKind.MAGE.ordinal();
+        if(number==3) {
+            if(index==2||index==8)return EnemyKind.MAGE.ordinal();
+            if(index==11)return EnemyKind.WARLOCK.ordinal();
+            if(index==13)return EnemyKind.CYCLOPS.ordinal();
+        }
+        if(number>=4) {
+            if(index%7==0)return EnemyKind.MAGE.ordinal();
+            if(index%7==3)return EnemyKind.WARLOCK.ordinal();
+            if(index%7==5)return EnemyKind.CYCLOPS.ordinal();
+            if(index%7==6)return EnemyKind.GHOST.ordinal();
+        }
+        return index%3==0?0:1;
     }
 }

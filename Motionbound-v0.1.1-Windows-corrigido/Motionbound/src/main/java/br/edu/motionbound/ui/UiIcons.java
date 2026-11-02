@@ -58,6 +58,11 @@ final class UiIcons implements Disposable {
         amount = MathUtils.clamp(amount, 0, 1);
         batch.setColor(.36f, .30f, .39f, 1);
         batch.draw(atlas, x, y, size, size, icon.ordinal() * CELL, 0, CELL, CELL, false, false);
+        if(icon==Icon.HEART) {
+            int columns=Math.round(CELL*amount);batch.setColor(Color.WHITE);
+            if(columns>0)batch.draw(atlas,x,y,size*columns/CELL,size,icon.ordinal()*CELL,0,columns,CELL,false,false);
+            return;
+        }
         int rows = Math.round(CELL * amount);
         batch.setColor(Color.WHITE);
         if (rows > 0) batch.draw(atlas, x, y, size, size * rows / CELL,
