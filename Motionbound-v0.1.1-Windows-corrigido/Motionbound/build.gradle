@@ -91,7 +91,23 @@ tasks.register('verifyCombat', JavaExec) {
     mainClass = 'br.edu.motionbound.CombatRulesTest'
 }
 
-tasks.named('check') { dependsOn 'verifySave', 'verifyCombat' }
+tasks.register('verifyCampaign', JavaExec) {
+    group = 'verification'
+    description = 'Verify all campaign maps, accessible exits, encounters and stage checkpoints.'
+    dependsOn verificationClasses
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'br.edu.motionbound.CampaignTest'
+}
+
+tasks.register('verifyEffects', JavaExec) {
+    group = 'verification'
+    description = 'Verify status durations, half-heart doses and enemy navigation.'
+    dependsOn verificationClasses
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'br.edu.motionbound.EffectsTest'
+}
+
+tasks.named('check') { dependsOn 'verifySave', 'verifyCombat', 'verifyCampaign', 'verifyEffects' }
 
 tasks.register('verifyDesktop', JavaExec) {
     group = 'verification'

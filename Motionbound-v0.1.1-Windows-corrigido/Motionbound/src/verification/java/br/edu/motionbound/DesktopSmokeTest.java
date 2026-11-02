@@ -2,6 +2,12 @@ package br.edu.motionbound;
 
 import br.edu.motionbound.game.SaveData;
 import br.edu.motionbound.game.MeleeSwing;
+import br.edu.motionbound.game.CampaignLevel;
+import br.edu.motionbound.game.DungeonMap;
+import br.edu.motionbound.game.EnemyKind;
+import br.edu.motionbound.game.PotionEffect;
+import br.edu.motionbound.game.StatusEffects;
+import br.edu.motionbound.game.CasterAttack;
 import br.edu.motionbound.input.GameMode;
 import br.edu.motionbound.ui.GameUi.Screen;
 import br.edu.motionbound.ui.GameUi;
@@ -35,6 +41,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
     private Application simulatedApplication;
     private int frame, key = -1, mouseX, mouseY;
     private int mouseButton=Input.Buttons.LEFT;
+    private boolean verifyingGuides;
     private final java.util.Set<Integer> held=new java.util.HashSet<>();
     private boolean click, exitRequested;
     private float pausedTime;
@@ -47,7 +54,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         DesktopSmokeTest test = new DesktopSmokeTest(Path.of(args[0]));
         new Lwjgl3Application(test, DesktopLauncher.configuration());
         if (test.failure != null) throw new AssertionError("Desktop verification failed", test.failure);
-        System.out.println("PASS: fullscreen, HUD, pause, resize, diagonal combat, animation timing, heart pickup, sensor simulation and save/continue");
+        System.out.println("PASS: fullscreen, HUD, combat, knockback, five-stage campaign, countdown, retry, both control modes and save/continue");
     }
 
     @Override public void create() {
@@ -73,6 +80,8 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
     }
 
     @Override public void render() {
+        // GLFW may request another application render from inside a window resize callback.
+        if(verifyingGuides)return;
         try {
             // LWJGL restores its globals when a fullscreen transition rebinds the window.
             Gdx.input = simulatedInput; Gdx.app = simulatedApplication;
@@ -81,6 +90,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                 case 5 -> { require(Gdx.graphics.isFullscreen(), "Fullscreen by default"); }
                 case 6 -> key=Input.Keys.ENTER;
                 case 8 -> key = Input.Keys.ENTER;
+                case 9 -> verifyIntro();
                 case 12 -> key = Input.Keys.ESCAPE;
                 case 14 -> { require(scene() == Screen.PAUSED, "ESC pauses"); pausedTime = (float)get(game, "elapsed"); }
                 case 20 -> { require((float)get(game, "elapsed") == pausedTime, "Time frozen in pause"); }
@@ -151,6 +161,12 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                     roomScreenshot("14-overgrown-chapel", 232, 400);
                     roomScreenshot("15-reliquary", 672, 400);
                     verifyCombatFlow();
+                    verifyEnemyEffectsFlow();
+                    verifyCasterCombosFlow();
+                    verifyGroundAreasFlow();
+                    verifyCampaignFlow();
+                    verifyingGuides=true;
+                    try {verifyGuideMenus();}finally {verifyingGuides=false;}
                 }
                 default -> { }
             }
@@ -164,6 +180,63 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
     }
 
     private Screen scene() { return (Screen)get(game, "scene"); }
+    private void clickPause(float localX,float localY) {
+        GameUi ui=(GameUi)get(game,"ui");
+        com.badlogic.gdx.utils.viewport.ExtendViewport uiViewport=(com.badlogic.gdx.utils.viewport.ExtendViewport)get(ui,"viewport");
+        Vector2 point=new Vector2((uiViewport.getWorldWidth()-1060)/2+localX,(uiViewport.getWorldHeight()-552)/2+localY);
+        uiViewport.project(point);mouseX=Math.round(point.x);mouseY=Gdx.graphics.getHeight()-Math.round(point.y);
+        click=true;game.render();click=false;game.render();
+    }
+    private void guideKey(int next) {key=next;game.render();key=-1;game.render();}
+    private void verifyGuideMenus() {
+        GameUi ui=(GameUi)get(game,"ui");set(game,"scene",Screen.PAUSED);key=-1;click=false;game.render();
+        SaveData before=(SaveData)call(game,"captureSave");
+        clickPause(148,178);
+        require(get(ui,"page").toString().equals("TUTORIAL"),"Mouse opens the tutorial");
+        require(get(ui,"tutorialMode")==before.mode,"Tutorial starts on the current expedition mode");
+        screenshot("44-tutorial-conventional-icons");
+        clickPause(843,424);require(get(ui,"tutorialMode")==GameMode.REHABILITATION,"Rehabilitation tab can be read independently of the expedition mode");
+        screenshot("45-tutorial-rehabilitation-gestures");
+        guideKey(Input.Keys.LEFT);require(get(ui,"tutorialMode")==GameMode.CONVENTIONAL,"Left/right switches tutorial tabs");
+        guideKey(Input.Keys.TAB);require((int)get(ui,"focus")==7,"Tab reaches the next guide control");
+        guideKey(Input.Keys.ENTER);require(get(ui,"tutorialMode")==GameMode.REHABILITATION,"Enter activates a focused tab");
+        clickPause(148,124);require(get(ui,"page").toString().equals("BESTIARY"),"Mouse opens the bestiary catalogue");
+        clickPause(507,424);screenshot("46-bestiary-catalogue");
+        for(int entry=0;entry<7;entry++) {
+            clickPause(451+(entry%3)*224,348-(entry/3)*96);
+            require((int)get(ui,"detailEntry")==entry,"Every enemy has an expandable detail entry, including bats");
+            if(entry==2||entry==3||entry==6)screenshot("47-enemy-detail-"+entry);
+            guideKey(Input.Keys.ESCAPE);
+            require(scene()==Screen.PAUSED&&get(ui,"page").toString().equals("BESTIARY")&&(int)get(ui,"detailEntry")==-1,"Escape closes details and keeps the catalogue paused");
+        }
+        clickPause(843,424);require((int)get(ui,"catalogueTab")==1,"Potion catalogue has a separate tab");
+        screenshot("48-potions-catalogue");
+        for(int entry=0;entry<4;entry++) {
+            clickPause(507+(entry%2)*336,324-(entry/2)*144);
+            require((int)get(ui,"detailEntry")==entry,"All four potion entries open their own details");
+            screenshot("49-potion-detail-"+entry);guideKey(Input.Keys.ESCAPE);
+        }
+        guideKey(Input.Keys.LEFT);require((int)get(ui,"catalogueTab")==0,"Keyboard switches back to enemies");
+        guideKey(Input.Keys.TAB);guideKey(Input.Keys.TAB);guideKey(Input.Keys.ENTER);
+        require((int)get(ui,"detailEntry")==0,"Keyboard can open the first catalogue entry");
+        for(int[] size:new int[][]{{960,540},{1440,720},{1920,1080}}) {
+            Gdx.graphics.setWindowedMode(size[0],size[1]);Gdx.input=simulatedInput;Gdx.app=simulatedApplication;
+            game.resize(size[0],size[1]);game.render();
+            screenshot("50-guide-detail-"+size[0]);guideKey(Input.Keys.ESCAPE);
+            clickPause(148,178);clickPause(507,424);
+            require(get(ui,"page").toString().equals("TUTORIAL")&&get(ui,"tutorialMode")==GameMode.CONVENTIONAL,"Tutorial controls remain interactive after resizing");
+            screenshot("51-tutorial-icons-"+size[0]);
+            clickPause(843,424);screenshot("52-tutorial-gestures-"+size[0]);
+            clickPause(148,124);clickPause(507,424);clickPause(451,348);
+        }
+        guideKey(Input.Keys.ESCAPE);guideKey(Input.Keys.ESCAPE);
+        require(scene()==Screen.PAUSED&&get(ui,"page").toString().equals("SUMMARY"),"Escape goes from detail to catalogue to expedition summary");
+        SaveData after=(SaveData)call(game,"captureSave");
+        require(after.mode==before.mode&&after.hp==before.hp&&after.elapsed==before.elapsed&&after.attacks==before.attacks
+                &&after.mana==before.mana&&after.enemies.size==before.enemies.size,"Reading both modes and catalogues never changes gameplay or advances time");
+        Gdx.graphics.setWindowedMode(1280,720);Gdx.input=simulatedInput;Gdx.app=simulatedApplication;
+        game.resize(1280,720);key=-1;click=false;game.render();set(ui,"focus",0);
+    }
     private void verifyCombatFlow() throws Exception {
         FileHandle previousFile=(FileHandle)get(game,"saveFile"),backup=output.child("before-combat-check.json");
         ((SaveData)call(game,"captureSave")).write(backup);
@@ -225,15 +298,15 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             }
             for(int i=0;i<24;i++)step(.02f);
             set(player,"hp",3);key=Input.Keys.SPACE;step(.02f);
-            require((int)get(player,"hp")==5&&(int)get(player,"heals")==2,"Space consumes one potion and restores two hearts");
+            require((float)get(player,"hp")==5&&(int)get(player,"heals")==2,"Space consumes one potion and restores two hearts");
             game.render();require(scene()==Screen.PLAYING,"Space healing cannot activate the pause button");
             screenshot("19-healing-animation");key=-1;
 
             Array<?> hearts=(Array<?>)get(game,"hearts");hearts.clear();set(game,"heartsCollected",0);
             set(player,"hp",6);addHeart(192,136);call(game,"collectHearts");
-            require(hearts.size==1&&(int)get(player,"hp")==6,"Full life does not consume a drop");
+            require(hearts.size==1&&(float)get(player,"hp")==6,"Full life does not consume a drop");
             set(player,"hp",5);call(game,"collectHearts");
-            require(hearts.size==0&&(int)get(player,"hp")==6&&(int)get(game,"heartsCollected")==1,"Pickup restores one heart with a hard life cap");
+            require(hearts.size==0&&(float)get(player,"hp")==6&&(int)get(game,"heartsCollected")==1,"Pickup restores one heart with a hard life cap");
             addHeart(209,136);game.render();screenshot("20-heart-drop");
             int deadBefore=(int)get(game,"defeated");
             set(enemies.get(0),"hp",0);set(enemies.get(1),"hp",0);call(game,"resolveDeaths");
@@ -249,7 +322,8 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             require(scene()==Screen.REHAB_SETUP,"Rehabilitation mode has its own preparation screen");
             screenshot("21-rehabilitation-preparation");
             key=Input.Keys.ENTER;game.render();key=-1;
-            require(scene()==Screen.PLAYING&&get(game,"mode")==GameMode.REHABILITATION,"Explicit simulator entry");
+            require(scene()==Screen.LEVEL_INTRO&&get(game,"mode")==GameMode.REHABILITATION,"Explicit simulator entry starts the same campaign");
+            advanceIntro(CampaignLevel.INTRO_SECONDS);
             enemies=(Array<?>)get(game,"enemies");
             for(Object enemy:enemies){set(enemy,"x",600f);set(enemy,"y",400f);set(enemy,"speed",0f);}
             step(.02f);held.add(Input.Keys.F);step(.02f);
@@ -272,10 +346,383 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                     &&simulation.pressureInBandSeconds<simulation.pressureSeconds,"Simulation and synthetic metrics remain labelled in saves");
             key=Input.Keys.ESCAPE;game.render();key=-1;game.render();screenshot("23-sensor-simulation-summary");
             set(game,"scene",Screen.DEFEAT);game.render();screenshot("24-sensor-simulation-result");
+            // Both modes use the same campaign transitions, without changing sensor thresholds.
+            set(game,"scene",Screen.PLAYING);
+            for(Object enemy:enemies)set(enemy,"hp",0);
+            call(game,"resolveDeaths");
+            DungeonMap map=(DungeonMap)get(game,"dungeon");set(player,"x",map.exitX());set(player,"y",map.exitY());step(.02f);
+            call(game,"nextStage");
+            require((int)get(game,"stage")==2&&scene()==Screen.LEVEL_INTRO&&get(game,"mode")==GameMode.REHABILITATION,
+                    "Rehabilitation mode survives stage progression");
         } finally {
             held.clear();key=-1;click=false;mouseButton=Input.Buttons.LEFT;
             set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previousFile);set(game,"scene",Screen.PAUSED);
         }
+    }
+    private void advanceIntro(float delta) {
+        try {Method method=game.getClass().getDeclaredMethod("updateIntro",float.class);method.setAccessible(true);method.invoke(game,delta);}
+        catch(ReflectiveOperationException e){throw new AssertionError(e);}
+    }
+    private void verifyEnemyEffectsFlow() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-effects-check.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            key=-1;click=false;held.clear();set(game,"stage",4);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+            Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);
+            Array<?> enemies=(Array<?>)get(game,"enemies");quietEnemies(enemies);
+            Object skeleton=enemies.first();set(skeleton,"type",1);set(skeleton,"hp",3);set(skeleton,"maxHp",3);
+            set(skeleton,"x",215f);set(skeleton,"y",136f);set(skeleton,"attackCd",0f);
+            step(.02f);require((float)get(skeleton,"windup")>0&&(float)get(player,"hp")==6,"Enemy warns before contact damage");
+            game.render();screenshot("31-enemy-windup");
+            set(player,"y",100f);for(int i=0;i<35;i++)step(.02f);
+            require((float)get(player,"hp")==6,"Moving away dodges the prepared melee attack");
+            set(player,"y",136f);set(skeleton,"attackCd",0f);set(skeleton,"actionTime",0f);step(.02f);
+            pointAt(245,136);click=true;step(.02f);click=false;for(int i=0;i<10;i++)step(.02f);
+            require((float)get(skeleton,"windup")==0&&(int)get(skeleton,"hp")==2,"Sword impact interrupts enemy preparation");
+            quietEnemies(enemies);
+            Object mage=enemies.get(1);set(mage,"type",EnemyKind.MAGE.ordinal());set(mage,"hp",2);set(mage,"maxHp",2);
+            set(mage,"x",267f);set(mage,"y",136f);set(mage,"attackCd",0f);
+            step(.02f);game.render();screenshot("32-mage-target-warning");
+            SaveData warning=SaveData.decode(((SaveData)call(game,"captureSave")).encode());
+            require(warning.enemies.get(1).windup>0&&warning.enemies.get(1).potion==PotionEffect.POISON,"Wind-up and locked potion are saved");
+            Array<?> vials=(Array<?>)get(game,"vials");
+            for(int i=0;i<80&&vials.isEmpty();i++)step(.02f);
+            require(vials.size==1,"Mage releases a physical vial after warning");
+            SaveData airborne=(SaveData)call(game,"captureSave");FileHandle airborneFile=output.child("airborne-vial-check.json");airborne.write(airborneFile);
+            set(game,"saveFile",airborneFile);call(game,"loadGame");
+            player=get(game,"player");enemies=(Array<?>)get(game,"enemies");quietEnemies(enemies);vials=(Array<?>)get(game,"vials");
+            require(vials.size==1,"Loading resumes the same airborne vial");
+            game.render();screenshot("33-vial-flight");
+            set(player,"y",112f);for(int i=0;i<55;i++)step(.02f);
+            StatusEffects effects=(StatusEffects)get(player,"effects");
+            require(vials.isEmpty()&&effects.ticksRemaining==0&&(float)get(player,"hp")==6,"Dodging the landing circle avoids the effect");
+
+            set(player,"hitInvuln",0f);addVial(PotionEffect.FIRE);step(.02f);
+            require(effects.damageEffect==PotionEffect.FIRE&&effects.ticksRemaining==4,"Red vial applies burning");
+            while(effects.ticksRemaining==4)step(.02f);
+            require((float)get(player,"hp")==5.5f,"Burning removes half a heart per tick");
+            game.render();screenshot("34-burning-half-heart");
+            FileHandle effectFile=output.child("active-effect-check.json");((SaveData)call(game,"captureSave")).write(effectFile);
+            set(game,"saveFile",effectFile);call(game,"loadGame");player=get(game,"player");effects=(StatusEffects)get(player,"effects");
+            require(effects.ticksRemaining==3&&(float)get(player,"hp")==5.5f,"Half hearts and remaining dose survive loading");
+            quietEnemies((Array<?>)get(game,"enemies"));
+            set(player,"x",192f);set(player,"y",184f);
+            while(effects.ticksRemaining>0)step(.02f);
+            require((float)get(player,"hp")==4,"Complete burn totals exactly two hearts");
+            set(player,"hp",6f);set(player,"hitInvuln",0f);addVial(PotionEffect.POISON);step(.02f);
+            key=Input.Keys.ESCAPE;game.render();key=-1;
+            float frozen=effects.untilTick;for(int i=0;i<10;i++)game.render();
+            require(scene()==Screen.PAUSED&&effects.untilTick==frozen&&(float)get(player,"hp")==6,"Pause freezes poison and health");
+            key=Input.Keys.ESCAPE;game.render();key=-1;
+            set(player,"hitInvuln",0f);addVial(PotionEffect.SLOW);step(.02f);
+            float beforeX=(float)get(player,"x");held.add(Input.Keys.D);for(int i=0;i<10;i++)step(.01f);held.clear();
+            float moved=(float)get(player,"x")-beforeX;
+            require(moved>3.8f&&moved<4.1f,"Grey vial actually slows movement to sixty percent");
+            game.render();screenshot("35-poison-and-slow-indicators");
+            ((Array<?>)get(game,"groundAreas")).clear();
+            set(player,"hp",4f);key=Input.Keys.SPACE;step(.02f);key=-1;
+            require((float)get(player,"hp")==6&&effects.ticksRemaining==0&&effects.slowRemaining>0,"Healing cleanses damaging effects");
+            effects.slowRemaining=0;set(player,"hitInvuln",0f);set(game,"riftsCast",1);
+            float originX=(float)get(player,"x"),originY=(float)get(player,"y");addVial(PotionEffect.RIFT);step(.02f);
+            DungeonMap map=(DungeonMap)get(game,"dungeon");
+            require((int)get(game,"summonedBats")==3&&(int)get(game,"totalEnemies")==21
+                    &&Vector2.dst2(originX,originY,(float)get(player,"x"),(float)get(player,"y"))>=96*96
+                    &&map.canStand((float)get(player,"x"),(float)get(player,"y"),5),"Blue vial teleports safely and creates exactly three bats: bats="
+                            +get(game,"summonedBats")+", total="+get(game,"totalEnemies")+", distance="+Vector2.dst(originX,originY,(float)get(player,"x"),(float)get(player,"y")));
+            game.render();screenshot("36-rift-and-bat-arrival");
+            FileHandle riftFile=output.child("rift-bats-check.json");((SaveData)call(game,"captureSave")).write(riftFile);
+            set(game,"saveFile",riftFile);call(game,"loadGame");player=get(game,"player");
+            require((int)get(game,"summonedBats")==3&&(int)get(game,"totalEnemies")==21,"Summoned enemies survive loading without duplication");
+            set(player,"hitInvuln",0f);((StatusEffects)get(player,"effects")).riftRemaining=0;
+            set(game,"riftsCast",2);addVial(PotionEffect.RIFT);step(.02f);
+            require((int)get(game,"summonedBats")==6,"Second rift creates a second wave");
+            set(player,"hitInvuln",0f);addVial(PotionEffect.RIFT);step(.02f);
+            require((int)get(game,"summonedBats")==6,"Rifts cannot create infinite waves");
+            enemies=(Array<?>)get(game,"enemies");int heartsBefore=((Array<?>)get(game,"hearts")).size;
+            for(Object enemy:enemies)if((int)get(enemy,"type")==EnemyKind.BAT.ordinal())set(enemy,"hp",0);
+            call(game,"resolveDeaths");require(((Array<?>)get(game,"hearts")).size==heartsBefore,"Summoned bats do not farm health drops");
+            for(Object enemy:enemies)set(enemy,"hp",0);call(game,"resolveDeaths");
+            set(player,"x",map.exitX());set(player,"y",map.exitY());step(.02f);
+            require(scene()==Screen.LEVEL_COMPLETE&&(int)get(game,"defeated")==24,"Stage exit accounts for the summoned enemies");
+            key=Input.Keys.ESCAPE;game.render();key=-1;game.render();
+            for(int i=0;i<4;i++){key=Input.Keys.DOWN;game.render();key=-1;game.render();}
+            key=Input.Keys.ENTER;game.render();key=-1;game.render();screenshot("37-bestiary-and-potions");
+        } finally {
+            held.clear();key=-1;click=false;
+            set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void quietEnemies(Array<?> enemies) {
+        for(Object enemy:enemies) {
+            set(enemy,"x",600f);set(enemy,"y",400f);set(enemy,"speed",0f);set(enemy,"attackCd",5f);
+            set(enemy,"windup",0f);set(enemy,"actionTime",0f);set(enemy,"kickX",0f);set(enemy,"kickY",0f);
+            set(enemy,"burstRemaining",0);set(enemy,"burstTimer",0f);set(enemy,"comboPending",false);set(enemy,"attack",CasterAttack.NONE);
+        }
+    }
+    private void verifyGroundAreasFlow() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-ground-areas.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            held.clear();key=-1;click=false;
+            for(PotionEffect type:new PotionEffect[]{PotionEffect.FIRE,PotionEffect.POISON,PotionEffect.SLOW}) {
+                set(game,"stage",4);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+                quietEnemies((Array<?>)get(game,"enemies"));Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);
+                addVial(type);step(.02f);Array<?> areas=(Array<?>)get(game,"groundAreas");
+                StatusEffects effects=(StatusEffects)get(player,"effects");
+                require(areas.size==1&&get(areas.first(),"effect")==type&&(float)get(areas.first(),"remaining")==5,"Direct impact applies the status AND creates a five-second area: "+type);
+                effects.advance(.2f);float clock=type==PotionEffect.SLOW?effects.slowRemaining:effects.untilTick;
+                tick("updateGroundAreas",.2f);
+                require((type==PotionEffect.SLOW?effects.slowRemaining:effects.untilTick)==clock,"Standing in an area cannot refresh an active status: "+type);
+                FileHandle checkpoint=output.child("ground-area-"+type+".json");((SaveData)call(game,"captureSave")).write(checkpoint);
+                set(game,"saveFile",checkpoint);call(game,"loadGame");player=get(game,"player");effects=(StatusEffects)get(player,"effects");
+                areas=(Array<?>)get(game,"groundAreas");
+                require(areas.size==1&&(float)get(areas.first(),"remaining")==4.8f,"Area lifetime is retained by loading: "+type);
+                game.pause();float life=(float)get(areas.first(),"remaining");game.render();game.render();
+                require((float)get(areas.first(),"remaining")==life,"Pause freezes area lifetime and animation clock: "+type);
+                set(game,"scene",Screen.PLAYING);quietEnemies((Array<?>)get(game,"enemies"));set(player,"x",230f);
+                for(int n=0;n<192;n++)step(.02f);
+                require((type==PotionEffect.SLOW?effects.slowRemaining==0:effects.ticksRemaining==0)&&!areas.isEmpty(),"The original status expires before its five-second source area: "+type);
+                set(player,"x",192f);set(player,"hitInvuln",0f);step(.02f);
+                require(type==PotionEffect.SLOW?effects.slowRemaining==4:effects.ticksRemaining==4,"Re-entering reacquires the effect only after expiry: "+type);
+                set(player,"x",230f);for(int n=0;n<52;n++)step(.02f);
+                require(areas.isEmpty()&&(type==PotionEffect.SLOW?effects.slowRemaining>0:effects.ticksRemaining>0),"Ground expires after five seconds without removing an acquired status: "+type);
+                effects.cleanseDamage();effects.slowRemaining=0;set(player,"hitInvuln",0f);
+                set(player,"x",192f);addVial(type);set(player,"x",230f);tick("updateVials",.02f);
+                require(areas.size==1&&effects.ticksRemaining==0&&effects.slowRemaining==0,"A missed vial still leaves its area without immediately applying a status: "+type);
+                set(player,"x",192f);tick("updateGroundAreas",.02f);
+                require(type==PotionEffect.SLOW?effects.slowRemaining==4:effects.damageEffect==type,"Entering a previously missed vial's area applies the first dose: "+type);
+            }
+            set(game,"stage",4);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+            quietEnemies((Array<?>)get(game,"enemies"));Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);set(game,"riftsCast",1);
+            addVial(PotionEffect.RIFT);step(.02f);Array<?> areas=(Array<?>)get(game,"groundAreas");Object rift=areas.first();
+            require(areas.size==1&&(boolean)get(rift,"summoned")&&(int)get(game,"summonedBats")==3,"Direct blue impact leaves a reusable portal and summons one wave");
+            FileHandle checkpoint=output.child("used-ground-rift.json");((SaveData)call(game,"captureSave")).write(checkpoint);
+            set(game,"saveFile",checkpoint);call(game,"loadGame");player=get(game,"player");areas=(Array<?>)get(game,"groundAreas");rift=areas.first();
+            require((boolean)get(rift,"summoned"),"Loading remembers which ground rift already summoned its bats");
+            set(player,"x",192f);set(player,"y",136f);set(player,"hitInvuln",0f);tick("updateGroundAreas",.02f);
+            require((float)get(player,"x")==192&&(float)get(player,"y")==136,"Arrival protection prevents immediate portal chains");
+            ((StatusEffects)get(player,"effects")).advance(1.5f);tick("updateGroundAreas",.02f);
+            require(Vector2.dst2(192,136,(float)get(player,"x"),(float)get(player,"y"))>=96*96&&(int)get(game,"summonedBats")==3,"The same portal teleports again after arrival without duplicating bats");
+            ((StatusEffects)get(player,"effects")).advance(1.5f);set(player,"hitInvuln",0f);set(game,"riftsCast",2);
+            addVial(PotionEffect.RIFT);tick("updateVials",.02f);require((int)get(game,"summonedBats")==6,"A second distinct rift can summon the second wave");
+            ((StatusEffects)get(player,"effects")).advance(1.5f);set(player,"hitInvuln",0f);set(player,"x",192f);set(player,"y",136f);
+            tick("updateGroundAreas",.02f);
+            require(Vector2.dst2(192,136,(float)get(player,"x"),(float)get(player,"y"))>=96*96&&(int)get(game,"summonedBats")==6,"The portal still teleports when the six-bat cap is reached");
+            SaveData.decode(((SaveData)call(game,"captureSave")).encode());
+            tick("updateGroundAreas",5.1f);require(areas.isEmpty(),"Blue portals disappear after five seconds");
+            // Show the four real rendered areas together, without applying them to the player.
+            set(game,"stage",1);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);quietEnemies((Array<?>)get(game,"enemies"));
+            player=get(game,"player");int n=0;
+            for(PotionEffect type:PotionEffect.values()) {
+                set(player,"x",128f+n++*48);set(player,"y",136f);addVial(type);set(player,"x",192f);set(player,"y",184f);tick("updateVials",.02f);
+            }
+            tick("updateGroundAreas",1.1f);set(game,"scene",Screen.PAUSED);game.render();
+            roomScreenshot("53-four-persistent-potion-areas",208,136);
+        } finally {
+            held.clear();key=-1;click=false;set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void tick(String method,float dt) {
+        try {Method m=game.getClass().getDeclaredMethod(method,float.class);m.setAccessible(true);m.invoke(game,dt);}
+        catch(ReflectiveOperationException e){throw new AssertionError(e);}
+    }
+    private void verifyCasterCombosFlow() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-combos-check.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            held.clear();key=-1;click=false;set(game,"stage",4);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+            Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);
+            Array<?> enemies=(Array<?>)get(game,"enemies");quietEnemies(enemies);
+            Object mage=enemies.first();set(mage,"type",EnemyKind.MAGE.ordinal());set(mage,"hp",2);set(mage,"maxHp",2);
+            set(mage,"x",267f);set(mage,"y",136f);set(mage,"cycle",0);
+            Array<?> vials=(Array<?>)get(game,"vials"),bolts=(Array<?>)get(game,"lightning");
+            for(int cast=0;cast<3;cast++) {
+                set(mage,"actionTime",0f);set(mage,"attackCd",0f);vials.clear();
+                tick("updateEnemies",.02f);
+                require(get(mage,"attack")== (cast<2?CasterAttack.POISON_VIAL:CasterAttack.LIGHTNING_FAN),"Mage cycle: two green throws then lightning");
+                if(cast==2)roomScreenshot("38-mage-lightning-warning",235,136);
+                for(int n=0;n<80&&(float)get(mage,"windup")>0;n++)tick("updateEnemies",.02f);
+                if(cast<2)require(vials.size==1&&get(vials.first(),"effect")==PotionEffect.POISON,"Mage never substitutes fire or blue for poison");
+            }
+            tick("updateEnemies",.02f);
+            require(bolts.size==1&&(int)get(mage,"burstRemaining")==4,"Lightning starts a timed five-shot burst");
+            float locked=(float)get(mage,"burstAngle");
+            FileHandle burstFile=output.child("lightning-burst-check.json");((SaveData)call(game,"captureSave")).write(burstFile);
+            set(game,"saveFile",burstFile);call(game,"loadGame");
+            player=get(game,"player");enemies=(Array<?>)get(game,"enemies");mage=enemies.first();bolts=(Array<?>)get(game,"lightning");
+            require(bolts.size==1&&(int)get(mage,"burstRemaining")==4,"Loading keeps emitted bolts and remaining burst");
+            set(player,"y",180f);
+            for(int n=0;n<25;n++)tick("updateEnemies",.02f);
+            require(bolts.size==5&&(int)get(mage,"cycle")==3,"Exactly five bolts, one completed cycle");
+            for(int n=0;n<5;n++) {
+                Object bolt=bolts.get(n);
+                float angle=new Vector2((float)get(bolt,"vx"),(float)get(bolt,"vy")).angleDeg();
+                require(Math.abs(angle-(locked-22.5f+n*11.25f))<.1f,"Each bolt keeps its original 45-degree fan direction despite player movement");
+            }
+            roomScreenshot("39-mage-lightning-fan",235,136);
+            // Sweep collision cannot skip the player even with a longer frame.
+            Object first=bolts.first();set(first,"x",240f);set(first,"y",180f);set(first,"vx",-150f);set(first,"vy",0f);
+            set(player,"x",220f);set(player,"hitInvuln",0f);tick("updateLightning",.2f);
+            require((float)get(player,"hp")==5.5f,"Lightning deals a single half-heart hit along its swept path");
+            bolts.clear();((Array<?>)get(game,"vials")).clear();quietEnemies(enemies);
+            set(player,"x",192f);set(player,"y",136f);set(player,"hp",6f);set(player,"hitInvuln",0f);
+            Object warlock=enemies.get(1);set(warlock,"type",EnemyKind.WARLOCK.ordinal());set(warlock,"hp",3);set(warlock,"maxHp",3);
+            set(warlock,"x",230f);set(warlock,"y",136f);set(warlock,"defensiveCd",0f);
+            tick("updateEnemies",.02f);
+            require(get(warlock,"attack")==CasterAttack.QUICK_SLOW,"Close approach triggers quick grey counter even during cooldown");
+            roomScreenshot("40-warlock-close-counter",213,136);
+            vials=(Array<?>)get(game,"vials");
+            for(int n=0;n<30&&vials.isEmpty();n++)tick("updateEnemies",.02f);
+            require(vials.size==1&&(boolean)get(vials.first(),"direct")&&(float)get(vials.first(),"flight")<.3f,"Quick grey vial travels directly and quickly");
+            set(player,"x",210f);tick("updateVials",.1f);
+            StatusEffects effects=(StatusEffects)get(player,"effects");
+            require(vials.isEmpty()&&effects.slowRemaining==4,"Grey counter hits during flight, before its landing time");
+            ((Array<?>)get(game,"groundAreas")).clear();
+            for(int n=0;n<60&&(float)get(warlock,"windup")==0;n++)tick("updateEnemies",.02f);
+            require(get(warlock,"attack")==CasterAttack.FIRE_FAN,"Grey counter is followed by red fan");
+            roomScreenshot("41-warlock-fire-warning",205,136);
+            for(int n=0;n<60&&vials.isEmpty();n++)tick("updateEnemies",.02f);
+            require(vials.size==3,"Warlock releases three fire vials simultaneously");
+            for(int n=0;n<3;n++) {
+                Object vial=vials.get(n);
+                float a=new Vector2((float)get(vial,"toX")-(float)get(vial,"fromX"),(float)get(vial,"toY")-(float)get(vial,"fromY")).angleDeg();
+                require(get(vial,"effect")==PotionEffect.FIRE&&Math.abs(a-(157.5f+n*22.5f))<.15f,"Three red vials cover the fixed 45-degree fan");
+            }
+            set(player,"x",192f);set(player,"y",184f);tick("updateVials",1.1f);
+            Array<?> fires=(Array<?>)get(game,"groundAreas");require(fires.size==3,"Each red vial leaves a ground fire");
+            Object fire=fires.first();set(player,"x",get(fire,"x"));set(player,"y",get(fire,"y"));
+            tick("updateGroundAreas",.1f);require(effects.damageEffect==PotionEffect.FIRE,"Walking into an existing fire ignites the player");
+            quietEnemies(enemies);roomScreenshot("42-fire-ground-and-burning",205,136);
+            FileHandle fireFile=output.child("ground-fire-check.json");((SaveData)call(game,"captureSave")).write(fireFile);
+            set(game,"saveFile",fireFile);call(game,"loadGame");
+            player=get(game,"player");effects=(StatusEffects)get(player,"effects");fires=(Array<?>)get(game,"groundAreas");
+            require(fires.size==3&&effects.ticksRemaining==4,"Ground duration and burn dose both survive saving");
+            game.pause();float remaining=(float)get(fires.first(),"remaining");game.render();game.render();
+            require(scene()==Screen.PAUSED&&(float)get(fires.first(),"remaining")==remaining,"Pause freezes ground fire");
+            set(player,"x",192f);set(player,"y",184f);set(game,"scene",Screen.PLAYING);
+            tick("updateGroundAreas",4.91f);require(fires.isEmpty()&&effects.ticksRemaining==4,"Ground expires at five seconds without cancelling an acquired burn");
+            for(int n=0;n<202;n++)step(.02f);
+            require((float)get(player,"hp")==4&&effects.ticksRemaining==0,"Burn keeps dealing exactly two hearts after leaving the fire");
+            // The blue attack belongs to ghosts only in the last two stages.
+            call(game,"resetWorld");set(game,"scene",Screen.PLAYING);player=get(game,"player");set(player,"x",192f);set(player,"y",136f);
+            enemies=(Array<?>)get(game,"enemies");quietEnemies(enemies);
+            Object ghost=enemies.first();set(ghost,"type",EnemyKind.GHOST.ordinal());set(ghost,"hp",2);set(ghost,"maxHp",2);
+            set(ghost,"x",267f);set(ghost,"y",136f);set(ghost,"attackCd",0f);set(game,"stage",3);
+            tick("updateEnemies",.02f);require((float)get(ghost,"windup")==0,"Ghost has no blue ranged attack before stage four");
+            set(game,"stage",4);tick("updateEnemies",.02f);
+            require(get(ghost,"attack")==CasterAttack.RIFT_VIAL&&(int)get(game,"riftsCast")==1&&(boolean)get(ghost,"portalUsed"),"Stage-four ghost reserves the blue vial");
+            roomScreenshot("43-ghost-blue-warning",235,136);
+            vials=(Array<?>)get(game,"vials");
+            for(int n=0;n<90&&vials.isEmpty();n++)tick("updateEnemies",.02f);
+            require(vials.size==1&&get(vials.first(),"effect")==PotionEffect.RIFT,"Ghost releases a physical blue vial");
+            tick("updateVials",1.1f);
+            require((int)get(game,"summonedBats")==3,"Ghost blue vial teleports and summons three bats");
+            set(ghost,"actionTime",0f);set(ghost,"attackCd",0f);set(ghost,"x",(float)get(player,"x")+20);set(ghost,"y",get(player,"y"));
+            tick("updateEnemies",.02f);require(get(ghost,"attack")==CasterAttack.NONE,"Ghost returns to melee after using its one blue vial");
+            set(game,"stage",5);call(game,"resetWorld");enemies=(Array<?>)get(game,"enemies");quietEnemies(enemies);
+            player=get(game,"player");ghost=enemies.first();set(ghost,"type",EnemyKind.GHOST.ordinal());set(ghost,"hp",2);set(ghost,"maxHp",2);
+            set(ghost,"x",get(player,"x"));set(ghost,"y",(float)get(player,"y")+20);set(ghost,"attackCd",0f);
+            tick("updateEnemies",.02f);require(get(ghost,"attack")==CasterAttack.RIFT_VIAL,"Stage-five ghost also uses the blue vial");
+        } finally {
+            held.clear();key=-1;click=false;set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    @SuppressWarnings({"rawtypes","unchecked"})
+    private void addVial(PotionEffect effect) throws Exception {
+        Object player=get(game,"player");float x=(float)get(player,"x"),y=(float)get(player,"y");
+        Class<?> type=Class.forName("br.edu.motionbound.MotionboundGame$Vial");
+        var constructor=type.getDeclaredConstructor(float.class,float.class,float.class,float.class,float.class,PotionEffect.class);
+        constructor.setAccessible(true);Object vial=constructor.newInstance(x,y,x,y,.5f,effect);set(vial,"elapsed",.49f);
+        ((Array)get(game,"vials")).add(vial);
+    }
+    private void verifyIntro() {
+        require(scene()==Screen.LEVEL_INTRO,"New campaign starts with a level introduction");
+        Object player=get(game,"player");Object enemy=((Array<?>)get(game,"enemies")).first();
+        float x=(float)get(player,"x"),enemyX=(float)get(enemy,"x");
+        key=Input.Keys.SPACE;held.add(Input.Keys.D);click=true;pointAt(x+40,(float)get(player,"y"));
+        game.render();screenshot("27-phase-1-introduction");
+        require(scene()==Screen.LEVEL_INTRO&&(float)get(player,"x")==x&&(float)get(enemy,"x")==enemyX
+                &&(int)get(game,"attacks")==0&&(float)get(game,"elapsed")==0,"Countdown freezes movement, combat and active time");
+        held.clear();click=false;key=-1;
+        advanceIntro(1.3f);game.render();screenshot("28-countdown-3");
+        advanceIntro(1f);game.render();screenshot("29-countdown-2");
+        advanceIntro(1f);game.render();screenshot("30-countdown-1");
+        require(scene()==Screen.LEVEL_INTRO&&(float)get(game,"elapsed")==0,"All countdown digits precede gameplay");
+        advanceIntro(1f);require(scene()==Screen.PLAYING,"Countdown starts gameplay automatically");
+    }
+    private void verifyCampaignFlow() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-campaign-check.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            key=-1;click=false;held.clear();call(game,"newCampaign");
+            for(int stage=1;stage<=CampaignLevel.COUNT;stage++) {
+                require((int)get(game,"stage")==stage&&scene()==Screen.LEVEL_INTRO,"Sequential stage entry: "+stage);
+                if(stage==2) {
+                    advanceIntro(1.4f);
+                    FileHandle introFile=output.child("stage-2-intro-check.json");
+                    float remaining=(float)get(game,"introRemaining");
+                    ((SaveData)call(game,"captureSave")).write(introFile);
+                    set(game,"saveFile",introFile);call(game,"loadGame");
+                    require(scene()==Screen.LEVEL_INTRO&&(float)get(game,"introRemaining")==remaining,"Loading resumes the saved countdown");
+                    key=Input.Keys.ESCAPE;game.render();key=-1;
+                    float frozen=(float)get(game,"introRemaining");game.render();
+                    require(scene()==Screen.PAUSED&&(float)get(game,"introRemaining")==frozen,"Pause freezes countdown");
+                    key=Input.Keys.ESCAPE;game.render();key=-1;
+                    require(scene()==Screen.LEVEL_INTRO,"Resume returns to the countdown");
+                }
+                advanceIntro(CampaignLevel.INTRO_SECONDS);game.render();
+                Object player=get(game,"player");Array<?> enemies=(Array<?>)get(game,"enemies");
+                DungeonMap map=(DungeonMap)get(game,"dungeon");
+                require(enemies.size==map.level.enemyCount()&&(float)get(player,"hp")==6&&(int)get(player,"heals")==3,
+                        "Stage encounters and replenishment: "+stage);
+                levelOverviewScreenshot("stage-"+stage+"-map");
+                screenshotAfterRender("stage-"+stage+"-hud");
+                if(stage==5) {
+                    key=Input.Keys.ESCAPE;game.render();key=-1;game.render();screenshot("stage-5-pause-summary");
+                    key=Input.Keys.ESCAPE;game.render();key=-1;
+                    require(scene()==Screen.PLAYING,"Last-stage summary supports all 22 guardians");
+                }
+                if(stage==3) {
+                    set(player,"hp",0);step(.02f);game.render();
+                    require(scene()==Screen.DEFEAT,"Defeat ends the current attempt");
+                    key=Input.Keys.ENTER;game.render();key=-1;
+                    require((int)get(game,"stage")==3&&scene()==Screen.LEVEL_INTRO,"Retry preserves current stage");
+                    advanceIntro(CampaignLevel.INTRO_SECONDS);game.render();
+                    player=get(game,"player");enemies=(Array<?>)get(game,"enemies");
+                }
+                set(player,"x",map.exitX());set(player,"y",map.exitY());step(.02f);
+                require(scene()==Screen.PLAYING,"Exit stays locked while any guardian lives");
+                for(Object enemy:enemies)set(enemy,"hp",0);call(game,"resolveDeaths");step(.02f);
+                require(scene()==(stage<CampaignLevel.COUNT?Screen.LEVEL_COMPLETE:Screen.VICTORY),"Stage/final completion: "+stage);
+                FileHandle checkpoint=output.child("stage-"+stage+"-complete-check.json");
+                ((SaveData)call(game,"captureSave")).write(checkpoint);
+                set(game,"saveFile",checkpoint);call(game,"resetWorld");call(game,"loadGame");
+                require((int)get(game,"stage")==stage&&(boolean)get(game,"stageComplete"),"Completed checkpoint restores this stage");
+                game.render();screenshot("stage-"+stage+"-completed");
+                if(stage<CampaignLevel.COUNT) {
+                    key=Input.Keys.ENTER;game.render();key=-1;
+                    require(scene()==Screen.LEVEL_INTRO,"Continue button starts the next countdown");
+                }
+            }
+            call(game,"nextStage");require((int)get(game,"stage")==5,"Final stage cannot advance beyond campaign");
+            key=Input.Keys.ENTER;game.render();key=-1;
+            require((int)get(game,"stage")==1&&scene()==Screen.LEVEL_INTRO,"Final victory offers a fresh campaign");
+        } finally {
+            held.clear();key=-1;click=false;
+            set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void screenshotAfterRender(String name) {game.render();screenshot(name);}
+    private void levelOverviewScreenshot(String name) {
+        OrthographicCamera camera=(OrthographicCamera)get(game,"worldCamera");
+        float x=camera.position.x,y=camera.position.y,zoom=camera.zoom;
+        try {
+            camera.position.set(DungeonMap.WIDTH*8,DungeonMap.HEIGHT*8,0);camera.zoom=2.7f;camera.update();
+            ((FitViewport)get(game,"viewport")).apply();
+            Gdx.gl.glClearColor(.07f,.06f,.09f,1);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+            for(String method:new String[]{"drawMap","drawGroundAreas","drawGroundShadows","drawEntities","drawWorldEffects","drawAmbientLighting"})call(game,method);
+            screenshot(name);
+        } finally {camera.position.set(x,y,0);camera.zoom=zoom;camera.update();}
     }
     /** Review all hand attachments at a larger scale, using the actual game renderer. */
     private void swordGripScreenshot() {
@@ -328,7 +775,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             camera.position.set(x,y,0);camera.update();
             Gdx.gl.glClearColor(.07f,.06f,.09f,1);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
             ((FitViewport)get(game,"viewport")).apply();
-            for(String method:new String[]{"drawMap","drawGroundShadows","drawEntities","drawWorldEffects","drawAmbientLighting"})call(game,method);
+            for(String method:new String[]{"drawMap","drawGroundAreas","drawGroundShadows","drawEntities","drawWorldEffects","drawAmbientLighting"})call(game,method);
             ((GameUi)get(game,"ui")).draw(Screen.PLAYING,view);
             screenshot(name);
         } finally {

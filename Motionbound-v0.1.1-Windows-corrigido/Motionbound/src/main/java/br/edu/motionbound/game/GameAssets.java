@@ -18,6 +18,7 @@ public final class GameAssets implements Disposable {
     public final Texture actionsTexture, heartTexture;
     public final TextureRegion[][] actions;
     public final TextureRegion heroPortrait;
+    public final TextureRegion batLeft,batBody,batRight;
     /** Pixel-aligned palm positions in each of the six armed poses; rows match the hero atlas. */
     private static final int[][] SWORD_GRIPS={
         {21,20, 21,19, 20,19, 21,19, 23,17, 19,19},
@@ -27,12 +28,12 @@ public final class GameAssets implements Disposable {
     };
     public record SwordHand(float x,float y,TextureRegion cover) { }
     public final SwordHand[][] swordHands=new SwordHand[4][6];
-    private final Texture townTexture, detailsTexture;
+    private final Texture townTexture, farmTexture, skiTexture, detailsTexture;
     public final TextureRegion[][] hero, slime, skeleton;
     public final boolean usingKenney;
     private final TextureRegion[][] tiles;
     private final int cols;
-    private final TextureRegion[][] town;
+    private final TextureRegion[][] town, farm, ski;
     private final TextureRegion[] details;
 
     public GameAssets() {
@@ -42,6 +43,8 @@ public final class GameAssets implements Disposable {
         tilesTexture.setFilter(Texture.TextureFilter.Nearest,Texture.TextureFilter.Nearest);
         tiles=TextureRegion.split(tilesTexture,16,16);
         cols=tiles[0].length;
+        TextureRegion bat=tile(120);
+        batLeft=new TextureRegion(bat,0,0,5,16);batBody=new TextureRegion(bat,5,0,6,16);batRight=new TextureRegion(bat,11,0,5,16);
         heroTexture=texture("characters/hero.png");
         slimeTexture=texture("characters/slime.png");
         skeletonTexture=texture("characters/skeleton.png");
@@ -69,6 +72,8 @@ public final class GameAssets implements Disposable {
         skeleton=TextureRegion.split(skeletonTexture,16,16);
         townTexture=texture("kenney/tiny-town/tilemap_packed.png");
         town=TextureRegion.split(townTexture,16,16);
+        farmTexture=texture("kenney/tiny-farm/tilemap_packed.png");farm=TextureRegion.split(farmTexture,16,16);
+        skiTexture=texture("kenney/tiny-ski/tilemap_packed.png");ski=TextureRegion.split(skiTexture,16,16);
         Pixmap accents=new Pixmap(112,16,Pixmap.Format.RGBA8888);
         accents.setColor(Color.valueOf("58424b"));
         for(int[] p:new int[][]{{2,7},{3,7},{4,8},{11,3},{11,4},{12,5},{8,12},{9,12}})accents.drawPixel(p[0],p[1]);
@@ -116,13 +121,26 @@ public final class GameAssets implements Disposable {
     }
     public TextureRegion prop(int index) {
         if(index<DungeonMap.TOWN)return tile(index);
-        int local=index-DungeonMap.TOWN;
-        return town[local/town[0].length][local%town[0].length];
+        TextureRegion[][] atlas=index>=DungeonMap.SKI?ski:index>=DungeonMap.FARM?farm:town;
+        int local=index%1000;
+        return atlas[local/atlas[0].length][local%atlas[0].length];
     }
     public TextureRegion detail(int index) {return details[index];}
+    public TextureRegion enemy(int type,int frame) {
+        return switch(EnemyKind.of(type)) {
+            case SLIME -> slime[0][frame%4];case SKELETON -> skeleton[0][frame%4];
+            case MAGE -> tile(84);case WARLOCK -> tile(111);case CYCLOPS -> tile(109);
+            case GHOST -> tile(108);case BAT -> tile(120);
+        };
+    }
+    public TextureRegion countdownDigit(int digit) {
+        if(digit<1||digit>3)throw new IllegalArgumentException("Countdown digit must be 1, 2 or 3");
+        return prop(DungeonMap.SKI+84+digit);
+    }
     @Override public void dispose() {
         tilesTexture.dispose();heroTexture.dispose();slimeTexture.dispose();skeletonTexture.dispose();
         townTexture.dispose();detailsTexture.dispose();glow.dispose();
+        farmTexture.dispose();skiTexture.dispose();
         actionsTexture.dispose();heartTexture.dispose();
     }
 }

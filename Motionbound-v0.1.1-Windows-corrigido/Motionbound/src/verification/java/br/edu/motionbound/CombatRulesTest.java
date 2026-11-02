@@ -13,6 +13,8 @@ public final class CombatRulesTest {
         for(int angle=0;angle<360;angle+=45) {
             Vector2 aim=new Vector2(1,0).rotateDeg(angle);
             require(CombatRules.inArc(aim.x*20,aim.y*20,aim),"Hit in direction "+angle);
+            require(CombatRules.inArc(aim.x*31,aim.y*31,aim),"Extended reach in direction "+angle);
+            require(!CombatRules.inArc(aim.x*33,aim.y*33,aim),"Extended reach remains bounded "+angle);
             require(!CombatRules.inArc(-aim.x*20,-aim.y*20,aim),"No hit behind "+angle);
             require(!CombatRules.inArc(aim.x*40,aim.y*40,aim),"No remote damage "+angle);
         }

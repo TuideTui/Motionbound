@@ -1,0 +1,9 @@
+Input Prompts Pixel 1.0 — Kenney
+Fonte: https://kenney.nl/assets/input-prompts-pixel
+Licença: CC0 1.0 Universal; consulte License.txt.
+
+O atlas tilemap_packed.png original contém tiles de 16x16 SEM espaçamento.
+Tilesheet.txt descreve a variante tilemap.png com espaçamento, não esta versão packed.
+O tutorial utiliza teclas, botões do mouse e setas de inclinação/rotação.
+As regiões são carregadas por InputPrompts.java, com filtro Nearest.
+O arquivo original não foi redesenhado ou suavizado.
