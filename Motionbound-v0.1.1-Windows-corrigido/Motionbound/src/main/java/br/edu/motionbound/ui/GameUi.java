@@ -31,6 +31,7 @@ public final class GameUi implements Disposable {
         public float hp,maxHp;
         public int heals, defeated, total;
         public final StatusEffects effects=new StatusEffects();
+        public boolean teleportPending;
         public float stamina, mana, elapsed, x, y, attackCd, magicCd, healCd;
         public boolean hasSave;
         public GameMode mode=GameMode.CONVENTIONAL,savedMode=GameMode.CONVENTIONAL;
@@ -58,6 +59,7 @@ public final class GameUi implements Disposable {
     private final ExtendViewport viewport = new ExtendViewport(1280, 720);
     private final SpriteBatch batch = new SpriteBatch();
     private final Texture white;
+    private final ScreenStatusEffects screenEffects;
     private final GameAssets art;
     private final UiIcons icons = new UiIcons();
     private final InputPrompts prompts=new InputPrompts();
@@ -78,6 +80,7 @@ public final class GameUi implements Disposable {
         Pixmap pixel = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pixel.setColor(Color.WHITE); pixel.fill();
         white = new Texture(pixel); pixel.dispose();
+        screenEffects=new ScreenStatusEffects(white,art.glow);
     }
 
     public void resize(int w, int h) {
@@ -186,6 +189,9 @@ public final class GameUi implements Disposable {
         viewport.apply(); batch.setProjectionMatrix(viewport.getCamera().combined);
         Gdx.gl.glEnable(GL20.GL_BLEND);
         batch.begin();
+        if(screen==Screen.PLAYING)screenEffects.update(view.effects,MathUtils.clamp(Gdx.graphics.getDeltaTime(),0,1f/30f));
+        else if(screen!=Screen.PAUSED)screenEffects.clear();
+        if(screen==Screen.PLAYING||screen==Screen.PAUSED)screenEffects.draw(batch,width,height,density);
         if (screen == Screen.PLAYING) hud(view);
         else if(screen==Screen.LEVEL_INTRO) {levelIntro(view);}
         else {
@@ -675,5 +681,5 @@ public final class GameUi implements Disposable {
         if (small != null) small.dispose(); if (body != null) body.dispose();
         if (heading != null) heading.dispose(); if (display != null) display.dispose();
     }
-    @Override public void dispose() { disposeFonts(); prompts.dispose();icons.dispose(); white.dispose(); batch.dispose(); }
+    @Override public void dispose() { disposeFonts(); screenEffects.dispose();prompts.dispose();icons.dispose(); white.dispose(); batch.dispose(); }
 }

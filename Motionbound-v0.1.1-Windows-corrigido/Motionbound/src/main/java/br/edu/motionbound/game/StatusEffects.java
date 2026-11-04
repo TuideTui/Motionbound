@@ -2,6 +2,7 @@ package br.edu.motionbound.game;
 
 /** Exact half-heart ticks, independent of rendering. A second damaging vial never resets/extends a dose. */
 public final class StatusEffects {
+    public static final float RIFT_DURATION=1.4f,RIFT_PULL_TIME=.3f,RIFT_RELEASE_TIME=RIFT_DURATION-RIFT_PULL_TIME;
     public PotionEffect damageEffect;
     public int ticksRemaining;
     public float untilTick,slowRemaining,riftRemaining;
@@ -12,7 +13,7 @@ public final class StatusEffects {
         }
         if(effect==PotionEffect.SLOW) {if(slowRemaining>0)return false;slowRemaining=4;return true;}
         if(riftRemaining>0)return false;
-        riftRemaining=1.4f;return true;
+        riftRemaining=RIFT_DURATION;return true;
     }
     public float advance(float delta) {
         if(!Float.isFinite(delta)||delta<0)throw new IllegalArgumentException("Invalid effect delta");

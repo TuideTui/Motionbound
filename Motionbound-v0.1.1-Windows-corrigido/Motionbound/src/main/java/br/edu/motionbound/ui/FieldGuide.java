@@ -39,7 +39,7 @@ final class FieldGuide {
             "Cria uma área de névoa cinza por 5 segundos, mesmo se acertar você. O impacto ou atravessar a névoa reduz sua velocidade para 60% por 4 segundos.",
             "A lentidão não reinicia enquanto está ativa, mas pode voltar após terminar se você continuar na área. A cura não a remove. Desvie do frasco rápido e use a magia para ganhar espaço.",-1,PotionEffect.SLOW),
         new Entry("Frasco de fenda","Redemoinho azul no chão","Área: 5s / 3 morcegos na primeira ativação",
-            "Cria um redemoinho azul por 5 segundos, mesmo no impacto direto. O impacto ou entrar nele teleporta você. Partículas são puxadas ao centro da fenda.",
+            "Cria um redemoinho azul por 5 segundos. O impacto ou entrar nele contrai e torce a imagem do cenário; em seguida você é teleportado e a câmera se expande suavemente na chegada.",
             "Pode teleportar de novo após a chegada e a proteção breve. Cada fenda invoca 3 morcegos só na primeira ativação, até 6 extras por fase. Saia da área azul e derrote os morcegos.",-1,PotionEffect.RIFT)
     };
     private FieldGuide() { }

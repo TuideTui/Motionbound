@@ -12,7 +12,9 @@ import java.nio.file.StandardCopyOption;
 
 /** One versioned local checkpoint, including combat state. Never deserialize arbitrary classes. */
 public final class SaveData {
-    public int version = 7;
+    public int version = 8;
+    public boolean teleportPending;
+    public float teleportTargetX,teleportTargetY;
     public int stage=1;
     public float introRemaining;
     public boolean stageComplete;
@@ -113,6 +115,7 @@ public final class SaveData {
             }
             data.groundFires.clear();data.version=7;
         }
+        if(data.version==7) {data.teleportPending=false;data.teleportTargetX=data.teleportTargetY=0;data.version=8;}
         data.validate();
         return data;
     }
@@ -120,7 +123,7 @@ public final class SaveData {
     public void validate() {
         DungeonMap map = new DungeonMap(stage);
         int total=map.level.enemyCount()+summonedBats;
-        if (version != 7 || !position(map, x, y, 5) || !Float.isFinite(hp)||hp < .5f || hp > 6 || hp*2!=(int)(hp*2) || heals < 0 || heals > 3
+        if (version != 8 || !position(map, x, y, 5) || !Float.isFinite(hp)||hp < .5f || hp > 6 || hp*2!=(int)(hp*2) || heals < 0 || heals > 3
                 || facing < 0 || facing > 3 || !range(stamina, 100) || !range(mana, 100)
                 || !range(elapsed, 31536000) || !range(hitInvuln, 1.4f) || !range(attackCd, 1)
                 || !range(magicCd, 1) || !range(healCd, 2) || enemies == null || spells == null
@@ -139,6 +142,9 @@ public final class SaveData {
                 || (swingTime>=0&&swingImpacted!=(swingTime>=MeleeSwing.IMPACT)))
             throw new IllegalArgumentException("Save inválido ou incompatível");
         effects.validate();int livingBats=0;
+        if(!range(teleportTargetX,DungeonMap.WIDTH*16)||!range(teleportTargetY,DungeonMap.HEIGHT*16)
+                ||teleportPending&&(!position(map,teleportTargetX,teleportTargetY,5)||effects.riftRemaining<=StatusEffects.RIFT_RELEASE_TIME
+                ||stageComplete||introRemaining>0))throw new IllegalArgumentException("Transição de fenda inválida no save");
         for (EnemyData enemy : enemies) {
             if (enemy == null || !position(map, enemy.x, enemy.y, 5) || enemy.type < 0 || enemy.type >=EnemyKind.values().length
                     || enemy.hp < 1 || enemy.hp > EnemyKind.of(enemy.type).maxHp || !range(enemy.attackCd, 6)
