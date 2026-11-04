@@ -8,20 +8,28 @@ import br.edu.motionbound.game.EnemyKind;
 import br.edu.motionbound.game.PotionEffect;
 import br.edu.motionbound.game.StatusEffects;
 import br.edu.motionbound.game.CasterAttack;
+import br.edu.motionbound.game.CameraDistortion;
 import br.edu.motionbound.input.GameMode;
 import br.edu.motionbound.ui.GameUi.Screen;
 import br.edu.motionbound.ui.GameUi;
+import br.edu.motionbound.ui.ScreenStatusEffects;
 import com.badlogic.gdx.Application;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
+import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Graphics;
+import org.lwjgl.glfw.GLFW;
+import org.lwjgl.glfw.GLFWWindowFocusCallback;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.PixmapIO;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.graphics.Texture;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.FrameBuffer;
+import com.badlogic.gdx.utils.viewport.Viewport;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.math.Vector2;
@@ -42,6 +50,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
     private int frame, key = -1, mouseX, mouseY;
     private int mouseButton=Input.Buttons.LEFT;
     private boolean verifyingGuides;
+    private boolean rendering;
     private final java.util.Set<Integer> held=new java.util.HashSet<>();
     private boolean click, exitRequested;
     private float pausedTime;
@@ -81,13 +90,14 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
 
     @Override public void render() {
         // GLFW may request another application render from inside a window resize callback.
-        if(verifyingGuides)return;
+        if(verifyingGuides||rendering)return;
+        rendering=true;
         try {
             // LWJGL restores its globals when a fullscreen transition rebinds the window.
             Gdx.input = simulatedInput; Gdx.app = simulatedApplication;
             frame++; key = -1; click = false;
             switch (frame) {
-                case 5 -> { require(Gdx.graphics.isFullscreen(), "Fullscreen by default"); }
+                case 5 -> verifyBorderlessFullscreen();
                 case 6 -> key=Input.Keys.ENTER;
                 case 8 -> key = Input.Keys.ENTER;
                 case 9 -> verifyIntro();
@@ -100,7 +110,13 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                 case 38 -> require(scene() == Screen.PAUSED, "ESC from tutorial keeps game paused");
                 case 42 -> require(scene() == Screen.PLAYING, "ESC from summary resumes");
                 case 44 -> key = Input.Keys.F11;
-                case 52 -> require(!Gdx.graphics.isFullscreen(), "F11 switches to window");
+                case 46 -> key = Input.Keys.F11;
+                case 48 -> {verifyBorderlessFullscreen();key=Input.Keys.F11;}
+                case 52 -> {
+                    long window=((Lwjgl3Graphics)Gdx.graphics).getWindow().getWindowHandle();
+                    require(!(boolean)get(game,"fullscreenWindow")&&GLFW.glfwGetWindowAttrib(window,GLFW.GLFW_DECORATED)==GLFW.GLFW_TRUE,
+                            "F11 switches back to a decorated window after borderless fullscreen");
+                }
                 case 56 -> { mouseX = Gdx.graphics.getWidth() - 100; mouseY = Gdx.graphics.getHeight() - 50; click = true; }
                 case 60 -> require(scene() == Screen.PAUSED, "Mouse opens pause menu");
                 case 62 -> { mouseX = 210; mouseY = 458; click = true; }
@@ -145,7 +161,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             switch (frame) {
                 case 5 -> screenshot("00-mode-selection-fullscreen");
                 case 7 -> screenshot("01-title-fullscreen");
-                case 10 -> screenshot("02-hud-fullscreen");
+                case 10 -> {screenshot("02-hud-fullscreen");verifyCaptureFocus();}
                 case 20 -> screenshot("03-pause-summary");
                 case 28 -> screenshot("04-settings");
                 case 34 -> screenshot("05-tutorial-fullscreen");
@@ -164,9 +180,10 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                     verifyEnemyEffectsFlow();
                     verifyCasterCombosFlow();
                     verifyGroundAreasFlow();
+                    verifyTeleportCinematic();
                     verifyCampaignFlow();
                     verifyingGuides=true;
-                    try {verifyGuideMenus();}finally {verifyingGuides=false;}
+                    try {verifyScreenStatusEffectsFlow();verifyGuideMenus();}finally {verifyingGuides=false;}
                 }
                 default -> { }
             }
@@ -177,9 +194,229 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                 application.exit();
             }
         } catch (Throwable e) { failure = e; e.printStackTrace(); application.exit(); }
+        finally {rendering=false;}
     }
 
     private Screen scene() { return (Screen)get(game, "scene"); }
+    private void verifyBorderlessFullscreen() {
+        var window=((Lwjgl3Graphics)Gdx.graphics).getWindow();
+        var monitor=Gdx.graphics.getMonitor();var display=Gdx.graphics.getDisplayMode(monitor);
+        require(!Gdx.graphics.isFullscreen()&&(boolean)get(game,"fullscreenWindow")
+                &&GLFW.glfwGetWindowAttrib(window.getWindowHandle(),GLFW.GLFW_DECORATED)==GLFW.GLFW_FALSE
+                &&Gdx.graphics.getWidth()==display.width&&Gdx.graphics.getHeight()==display.height
+                &&window.getPositionX()==monitor.virtualX&&window.getPositionY()==monitor.virtualY,
+                "Borderless fullscreen fills the monitor without exclusive display mode: active="+get(game,"fullscreenWindow")
+                +", decorated="+GLFW.glfwGetWindowAttrib(window.getWindowHandle(),GLFW.GLFW_DECORATED)
+                +", size="+Gdx.graphics.getWidth()+"x"+Gdx.graphics.getHeight()+", display="+display.width+"x"+display.height
+                +", position="+window.getPositionX()+","+window.getPositionY()+", monitor="+monitor.virtualX+","+monitor.virtualY);
+    }
+    private void verifyCaptureFocus() {
+        var window=((Lwjgl3Graphics)Gdx.graphics).getWindow();
+        Screen previous=scene();float time=(float)get(game,"elapsed");
+        try {
+            set(game,"scene",Screen.PLAYING);
+            deliverFocus(false);
+            require(!window.isFocused()&&!window.isIconified()&&scene()==Screen.PLAYING,
+                    "Losing focus to a capture overlay neither minimizes nor pauses the game");
+            game.render();
+            require(scene()==Screen.PLAYING&&(float)get(game,"elapsed")>time,
+                    "Gameplay continues rendering and advancing while the capture overlay has focus");
+            screenshot("60-capture-overlay-focus");
+        } finally {
+            deliverFocus(true);set(game,"scene",previous);set(game,"elapsed",time);
+        }
+    }
+    private void deliverFocus(boolean focused) {
+        var window=((Lwjgl3Graphics)Gdx.graphics).getWindow();
+        Array<?> queue=(Array<?>)get(window,"runnables");int next=queue.size;
+        ((GLFWWindowFocusCallback)get(window,"focusCallback")).invoke(window.getWindowHandle(),focused);
+        // GLFW queues focus notifications; deliver this event before asserting its result.
+        ((Runnable)queue.removeIndex(next)).run();
+    }
+    private void verifyEdgePixels() {
+        int w=1280,h=720;
+        FrameBuffer buffer=new FrameBuffer(Pixmap.Format.RGBA8888,w,h,false);
+        SpriteBatch effectBatch=new SpriteBatch();
+        OrthographicCamera camera=new OrthographicCamera();camera.setToOrtho(false,w,h);
+        effectBatch.setProjectionMatrix(camera.combined);
+        Texture pixel=(Texture)get(get(game,"ui"),"white");
+        try {
+            buffer.begin();Gdx.gl.glClearColor(.04f,.03f,.07f,1);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+            byte[] baseline=ScreenUtils.getFrameBufferPixels(0,0,w,h,false);
+            for(int scenario=0;scenario<5;scenario++) {
+                StatusEffects state=new StatusEffects();
+                if(scenario<4)state.apply(PotionEffect.values()[scenario]);
+                else {state.apply(PotionEffect.POISON);state.apply(PotionEffect.SLOW);state.apply(PotionEffect.RIFT);}
+                ScreenStatusEffects layer=new ScreenStatusEffects(pixel,((br.edu.motionbound.game.GameAssets)get(game,"art")).glow);layer.update(state,.25f);
+                Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);effectBatch.begin();layer.draw(effectBatch,w,h,1);effectBatch.end();
+                byte[] active=ScreenUtils.getFrameBufferPixels(0,0,w,h,false);
+                int changed=0;
+                for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
+                    int p=(y*w+x)*4;
+                    boolean difference=false;for(int c=0;c<4;c++)if(active[p+c]!=baseline[p+c])difference=true;
+                    if(difference)changed++;
+                    if(x>=110&&x<w-110)require(!difference,"Status particles preserve a clear central playfield");
+                }
+                boolean rift=scenario==PotionEffect.RIFT.ordinal();
+                require(rift?changed==0:changed>1000,"Rift uses camera distortion only; other statuses have visible edge feedback");
+                layer.update(state,.2f);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+                effectBatch.begin();layer.draw(effectBatch,w,h,1);effectBatch.end();
+                if(!rift)require(!java.util.Arrays.equals(active,ScreenUtils.getFrameBufferPixels(0,0,w,h,false)),"Pixel frames and particle positions animate with elapsed time");
+                layer.update(new StatusEffects(),1);
+                Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);effectBatch.begin();layer.draw(effectBatch,w,h,1);effectBatch.end();
+                require(java.util.Arrays.equals(baseline,ScreenUtils.getFrameBufferPixels(0,0,w,h,false)),"Ending or cleansing statuses fully removes their edge layer");
+                layer.dispose();
+            }
+        } finally {buffer.end();effectBatch.dispose();buffer.dispose();}
+    }
+    private void verifyCameraDistortion() {
+        CameraDistortion distortion=(CameraDistortion)get(game,"cameraDistortion");
+        int w=Gdx.graphics.getBackBufferWidth(),h=Gdx.graphics.getBackBufferHeight();
+        Texture pixel=(Texture)get(get(game,"ui"),"white");
+        SpriteBatch pattern=new SpriteBatch();
+        OrthographicCamera camera=new OrthographicCamera();camera.setToOrtho(false,w,h);
+        pattern.setProjectionMatrix(camera.combined);pattern.disableBlending();
+        Runnable draw=()->{
+            Gdx.gl.glViewport(0,0,w,h);pattern.begin();
+            for(int y=0;y<h;y+=32)for(int x=0;x<w;x+=32) {
+                pattern.setColor(x<w/3?1:0,((x/32+y/32)%2==0)?1:0,y<h/2?1:0,1);
+                pattern.draw(pixel,x,y,32,32);
+            }
+            pattern.end();
+        };
+        try {
+            draw.run();byte[] baseline=ScreenUtils.getFrameBufferPixels(0,0,w,h,false);
+            for(int scenario=0;scenario<4;scenario++) {
+                distortion.begin(w,h);draw.run();
+                distortion.present(scenario==1,scenario==1?StatusEffects.RIFT_DURATION-.27f:scenario==2?1f:0);
+                byte[] actual=ScreenUtils.getFrameBufferPixels(0,0,w,h,false);
+                int changed=0;
+                for(int y=0;y<h;y++)for(int x=0;x<w;x++) {
+                    int p=(y*w+x)*4;boolean different=false;
+                    for(int c=0;c<3;c++) {
+                        if(actual[p+c]!=baseline[p+c])different=true;
+                        int channel=actual[p+c]&255;
+                        require(channel==0||channel==255,"Camera distortion reuses scene pixels without blue tint or blur");
+                    }
+                    if(different)changed++;
+                    if((x<2||x>=w-2)&&(y<2||y>=h-2))require(!different,"Distortion pins camera corners without empty borders");
+                }
+                require(scenario==1||scenario==2?changed>w*h/20:changed==0,
+                        "Suction and arrival warp the image; the completed transition restores its exact orientation and pixels");
+            }
+        } finally {pattern.dispose();}
+    }
+    private void verifyScreenStatusEffectsFlow() throws Exception {
+        verifyEdgePixels();
+        verifyCameraDistortion();
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-screen-status-effects.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            key=-1;click=false;held.clear();set(game,"stage",1);call(game,"resetWorld");
+            quietEnemies((Array<?>)get(game,"enemies"));
+            ScreenStatusEffects layer=(ScreenStatusEffects)get(get(game,"ui"),"screenEffects");
+            for(PotionEffect type:PotionEffect.values()) {
+                layer.clear();Object player=get(game,"player");StatusEffects effects=(StatusEffects)get(player,"effects");
+                effects.cleanseDamage();effects.slowRemaining=0;effects.riftRemaining=0;effects.apply(type);
+                set(game,"scene",Screen.PLAYING);
+                for(int n=0;n<24;n++)game.render();
+                float strength=((float[])get(layer,"strength"))[type.ordinal()];
+                require(type==PotionEffect.RIFT?strength==0:strength>0,"Gameplay feeds edge feedback without blue screen particles");
+                screenshot("55-screen-status-"+type);
+            }
+            Object player=get(game,"player");StatusEffects effects=(StatusEffects)get(player,"effects");
+            effects.cleanseDamage();effects.riftRemaining=0;effects.apply(PotionEffect.POISON);effects.apply(PotionEffect.SLOW);effects.apply(PotionEffect.RIFT);
+            for(int n=0;n<16;n++)game.render();screenshot("56-screen-status-combined");
+            game.pause();
+            float[] phase=((float[])get(layer,"phase")).clone(),strength=((float[])get(layer,"strength")).clone();
+            for(int n=0;n<8;n++)game.render();
+            require(java.util.Arrays.equals(phase,(float[])get(layer,"phase"))&&java.util.Arrays.equals(strength,(float[])get(layer,"strength")),"Pause freezes the edge particles and their fades");
+            FileHandle checkpoint=output.child("screen-status-checkpoint.json");((SaveData)call(game,"captureSave")).write(checkpoint);
+            set(game,"scene",Screen.MENU);game.render();
+            for(float value:(float[])get(layer,"strength"))require(value==0,"Returning to the menu clears screen effects");
+            set(game,"saveFile",checkpoint);call(game,"loadGame");quietEnemies((Array<?>)get(game,"enemies"));
+            for(int n=0;n<16;n++)game.render();
+            require(((float[])get(layer,"strength"))[PotionEffect.POISON.ordinal()]>0,"Loading an active status restores its screen feedback");
+            for(int[] size:new int[][]{{960,540},{1280,960},{1440,720},{1920,1080},{1920,1200}}) {
+                // Keep a visible dose while verifying the corners at each display density/aspect.
+                effects=(StatusEffects)get(get(game,"player"),"effects");effects.riftRemaining=1.4f;
+                Gdx.graphics.setWindowedMode(size[0],size[1]);Gdx.input=simulatedInput;Gdx.app=simulatedApplication;
+                game.resize(size[0],size[1]);game.render();
+                Viewport world=(Viewport)get(game,"viewport");
+                require(world.getScreenX()==0&&world.getScreenY()==0&&world.getScreenWidth()==size[0]&&world.getScreenHeight()==size[1],
+                        "The world fills the entire window without letterboxing at "+size[0]+"x"+size[1]);
+                OrthographicCamera camera=(OrthographicCamera)get(game,"worldCamera");
+                require(Math.abs(camera.viewportWidth/camera.viewportHeight-size[0]/(float)size[1])<.001f,"World proportions match the screen without distorting sprites");
+                Vector2 projected=world.project(new Vector2(200,150));
+                require(world.unproject(new Vector2(projected.x,Gdx.graphics.getHeight()-projected.y)).dst2(200,150)<.01f,"Mouse aiming round-trips after filling the new aspect ratio");
+                screenshot("57-screen-status-"+size[0]+"x"+size[1]);
+            }
+            captureStatusAnimation(layer,PotionEffect.FIRE,"fire-motion");
+            captureStatusAnimation(layer,PotionEffect.SLOW,"smoke-motion");
+            captureStatusAnimation(layer,PotionEffect.POISON,"poison-motion");
+            captureTeleportAnimation();
+            set(game,"stage",2);call(game,"startStage");game.render();
+            for(float value:(float[])get(layer,"strength"))require(value==0,"A fresh stage never inherits old status borders");
+            Gdx.graphics.setWindowedMode(1280,720);Gdx.input=simulatedInput;Gdx.app=simulatedApplication;game.resize(1280,720);
+        } finally {
+            key=-1;click=false;held.clear();set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void captureStatusAnimation(ScreenStatusEffects layer,PotionEffect type,String folder) throws Exception {
+        Gdx.graphics.setWindowedMode(1280,800);Gdx.input=simulatedInput;Gdx.app=simulatedApplication;game.resize(1280,800);
+        Object player=get(game,"player");StatusEffects effects=(StatusEffects)get(player,"effects");
+        effects.cleanseDamage();effects.slowRemaining=0;effects.riftRemaining=0;effects.apply(type);layer.clear();
+        FileHandle frames=output.child(folder);frames.mkdirs();
+        for(int n=0;n<48;n++) {
+            ((float[])get(layer,"phase"))[type.ordinal()]=n/30f;
+            layer.update(effects,.2f);game.render();
+            Pixmap frame=ScreenUtils.getFrameBufferPixmap(0,0,Gdx.graphics.getBackBufferWidth(),Gdx.graphics.getBackBufferHeight());
+            PixmapIO.writePNG(frames.child(String.format(java.util.Locale.ROOT,"fire-%03d.png",n)),frame,-1,true);frame.dispose();
+        }
+    }
+    private void captureTeleportAnimation() throws Exception {
+        ((ScreenStatusEffects)get(get(game,"ui"),"screenEffects")).clear();
+        set(game,"stage",4);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+        quietEnemies((Array<?>)get(game,"enemies"));Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);set(game,"riftsCast",1);
+        addVial(PotionEffect.RIFT);step(.02f);
+        FileHandle frames=output.child("teleport-motion");frames.mkdirs();
+        for(int n=0;n<48;n++) {
+            float renderStep=Math.min(Gdx.graphics.getDeltaTime(),1f/30);
+            step(Math.max(0,1f/30-renderStep));game.render();
+            Pixmap frame=ScreenUtils.getFrameBufferPixmap(0,0,Gdx.graphics.getBackBufferWidth(),Gdx.graphics.getBackBufferHeight());
+            PixmapIO.writePNG(frames.child(String.format(java.util.Locale.ROOT,"fire-%03d.png",n)),frame,-1,true);frame.dispose();
+        }
+    }
+    private void finishRift() {
+        for(int n=0;n<30&&(boolean)get(game,"teleportPending");n++)step(.02f);
+        require(!(boolean)get(game,"teleportPending"),"The suction phase completes its teleport");
+    }
+    private void verifyTeleportCinematic() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-teleport-cinematic.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            key=-1;click=false;held.clear();set(game,"stage",4);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+            quietEnemies((Array<?>)get(game,"enemies"));Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);set(game,"riftsCast",1);
+            addVial(PotionEffect.RIFT);step(.02f);
+            require((boolean)get(game,"teleportPending")&&(float)get(player,"x")==192&&(float)get(player,"y")==136,"Blue hit begins suction before moving the hero");
+            float targetX=(float)get(game,"teleportTargetX"),targetY=(float)get(game,"teleportTargetY");
+            held.add(Input.Keys.D);click=true;step(.1f);held.clear();click=false;
+            require((float)get(player,"x")==192&&(float)get(player,"y")==136&&(int)get(game,"attacks")==0,"Suction briefly locks movement and attacks while protecting the hero");
+            step(.07f);game.render();screenshot("58-rift-suction");game.pause();
+            float timer=((StatusEffects)get(player,"effects")).riftRemaining;for(int n=0;n<6;n++)game.render();
+            require(((StatusEffects)get(player,"effects")).riftRemaining==timer&&(boolean)get(game,"teleportPending"),"Pause freezes the suction before arrival");
+            FileHandle checkpoint=output.child("pending-teleport.json");((SaveData)call(game,"captureSave")).write(checkpoint);
+            set(game,"saveFile",checkpoint);call(game,"loadGame");player=get(game,"player");
+            require((boolean)get(game,"teleportPending")&&(float)get(player,"x")==192&&(float)get(game,"teleportTargetX")==targetX,"Loading resumes the same reserved destination and suction");
+            finishRift();game.render();screenshot("59-rift-arrival");
+            require(Vector2.dst2((float)get(player,"x"),(float)get(player,"y"),targetX,targetY)<.01f
+                    &&(int)get(game,"summonedBats")==3&&(float)get(player,"hitInvuln")>0,"Arrival moves once, releases the screen effect and preserves protection without duplicating bats");
+            SaveData saved=SaveData.decode(((SaveData)call(game,"captureSave")).encode());
+            require(!saved.teleportPending&&saved.teleportTargetX==0&&saved.teleportTargetY==0,"Completed teleport clears its pending destination");
+        } finally {
+            key=-1;click=false;held.clear();set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
     private void clickPause(float localX,float localY) {
         GameUi ui=(GameUi)get(game,"ui");
         com.badlogic.gdx.utils.viewport.ExtendViewport uiViewport=(com.badlogic.gdx.utils.viewport.ExtendViewport)get(ui,"viewport");
@@ -424,6 +661,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             require((float)get(player,"hp")==6&&effects.ticksRemaining==0&&effects.slowRemaining>0,"Healing cleanses damaging effects");
             effects.slowRemaining=0;set(player,"hitInvuln",0f);set(game,"riftsCast",1);
             float originX=(float)get(player,"x"),originY=(float)get(player,"y");addVial(PotionEffect.RIFT);step(.02f);
+            finishRift();
             DungeonMap map=(DungeonMap)get(game,"dungeon");
             require((int)get(game,"summonedBats")==3&&(int)get(game,"totalEnemies")==21
                     &&Vector2.dst2(originX,originY,(float)get(player,"x"),(float)get(player,"y"))>=96*96
@@ -435,6 +673,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             require((int)get(game,"summonedBats")==3&&(int)get(game,"totalEnemies")==21,"Summoned enemies survive loading without duplication");
             set(player,"hitInvuln",0f);((StatusEffects)get(player,"effects")).riftRemaining=0;
             set(game,"riftsCast",2);addVial(PotionEffect.RIFT);step(.02f);
+            finishRift();
             require((int)get(game,"summonedBats")==6,"Second rift creates a second wave");
             set(player,"hitInvuln",0f);addVial(PotionEffect.RIFT);step(.02f);
             require((int)get(game,"summonedBats")==6,"Rifts cannot create infinite waves");
@@ -495,6 +734,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             set(game,"stage",4);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
             quietEnemies((Array<?>)get(game,"enemies"));Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);set(game,"riftsCast",1);
             addVial(PotionEffect.RIFT);step(.02f);Array<?> areas=(Array<?>)get(game,"groundAreas");Object rift=areas.first();
+            finishRift();
             require(areas.size==1&&(boolean)get(rift,"summoned")&&(int)get(game,"summonedBats")==3,"Direct blue impact leaves a reusable portal and summons one wave");
             FileHandle checkpoint=output.child("used-ground-rift.json");((SaveData)call(game,"captureSave")).write(checkpoint);
             set(game,"saveFile",checkpoint);call(game,"loadGame");player=get(game,"player");areas=(Array<?>)get(game,"groundAreas");rift=areas.first();
@@ -502,11 +742,13 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             set(player,"x",192f);set(player,"y",136f);set(player,"hitInvuln",0f);tick("updateGroundAreas",.02f);
             require((float)get(player,"x")==192&&(float)get(player,"y")==136,"Arrival protection prevents immediate portal chains");
             ((StatusEffects)get(player,"effects")).advance(1.5f);tick("updateGroundAreas",.02f);
+            finishRift();
             require(Vector2.dst2(192,136,(float)get(player,"x"),(float)get(player,"y"))>=96*96&&(int)get(game,"summonedBats")==3,"The same portal teleports again after arrival without duplicating bats");
             ((StatusEffects)get(player,"effects")).advance(1.5f);set(player,"hitInvuln",0f);set(game,"riftsCast",2);
-            addVial(PotionEffect.RIFT);tick("updateVials",.02f);require((int)get(game,"summonedBats")==6,"A second distinct rift can summon the second wave");
+            addVial(PotionEffect.RIFT);tick("updateVials",.02f);finishRift();require((int)get(game,"summonedBats")==6,"A second distinct rift can summon the second wave");
             ((StatusEffects)get(player,"effects")).advance(1.5f);set(player,"hitInvuln",0f);set(player,"x",192f);set(player,"y",136f);
             tick("updateGroundAreas",.02f);
+            finishRift();
             require(Vector2.dst2(192,136,(float)get(player,"x"),(float)get(player,"y"))>=96*96&&(int)get(game,"summonedBats")==6,"The portal still teleports when the six-bat cap is reached");
             SaveData.decode(((SaveData)call(game,"captureSave")).encode());
             tick("updateGroundAreas",5.1f);require(areas.isEmpty(),"Blue portals disappear after five seconds");
@@ -616,6 +858,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             for(int n=0;n<90&&vials.isEmpty();n++)tick("updateEnemies",.02f);
             require(vials.size==1&&get(vials.first(),"effect")==PotionEffect.RIFT,"Ghost releases a physical blue vial");
             tick("updateVials",1.1f);
+            finishRift();
             require((int)get(game,"summonedBats")==3,"Ghost blue vial teleports and summons three bats");
             set(ghost,"actionTime",0f);set(ghost,"attackCd",0f);set(ghost,"x",(float)get(player,"x")+20);set(ghost,"y",get(player,"y"));
             tick("updateEnemies",.02f);require(get(ghost,"attack")==CasterAttack.NONE,"Ghost returns to melee after using its one blue vial");
@@ -718,7 +961,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         float x=camera.position.x,y=camera.position.y,zoom=camera.zoom;
         try {
             camera.position.set(DungeonMap.WIDTH*8,DungeonMap.HEIGHT*8,0);camera.zoom=2.7f;camera.update();
-            ((FitViewport)get(game,"viewport")).apply();
+            ((Viewport)get(game,"viewport")).apply();
             Gdx.gl.glClearColor(.07f,.06f,.09f,1);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
             for(String method:new String[]{"drawMap","drawGroundAreas","drawGroundShadows","drawEntities","drawWorldEffects","drawAmbientLighting"})call(game,method);
             screenshot(name);
@@ -734,7 +977,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         int oldFacing=(int)get(player,"facing");boolean oldMoving=(boolean)get(player,"moving");
         try {
             camera.zoom=.6f;camera.update();
-            ((FitViewport)get(game,"viewport")).apply();
+            ((Viewport)get(game,"viewport")).apply();
             Gdx.gl.glClearColor(.07f,.06f,.09f,1);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
             for(int facing=0;facing<4;facing++)for(int pose=0;pose<6;pose++) {
                 set(player,"x",192+(pose-2.5f)*34);set(player,"y",136+(1.5f-facing)*32);
@@ -750,7 +993,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         }
     }
     private void pointAt(float x,float y) {
-        Vector2 point=((FitViewport)get(game,"viewport")).project(new Vector2(x,y));
+        Vector2 point=((Viewport)get(game,"viewport")).project(new Vector2(x,y));
         mouseX=Math.round(point.x);mouseY=Gdx.graphics.getHeight()-Math.round(point.y);
     }
     private void step(float delta) {
@@ -774,7 +1017,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             set(player,"x",x);set(player,"y",y);view.x=x;view.y=y;
             camera.position.set(x,y,0);camera.update();
             Gdx.gl.glClearColor(.07f,.06f,.09f,1);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
-            ((FitViewport)get(game,"viewport")).apply();
+            ((Viewport)get(game,"viewport")).apply();
             for(String method:new String[]{"drawMap","drawGroundAreas","drawGroundShadows","drawEntities","drawWorldEffects","drawAmbientLighting"})call(game,method);
             ((GameUi)get(game,"ui")).draw(Screen.PLAYING,view);
             screenshot(name);
@@ -805,5 +1048,6 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
     }
     private static void require(boolean value, String message) { if (!value) throw new AssertionError(message); }
     @Override public void resize(int width, int height) { game.resize(width, height); }
+    @Override public void pause() { game.pause(); }
     @Override public void dispose() { Gdx.input = input; Gdx.app = application; game.dispose(); }
 }

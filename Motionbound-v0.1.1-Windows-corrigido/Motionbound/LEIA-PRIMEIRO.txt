@@ -14,7 +14,8 @@ O script agora seleciona o JDK 25 existente e fixa a pasta correta do Gradle.
 Se houver erros, envie o terminal completo. Nao execute gradle run na pasta pai.
 
 Arte ja incluida: Kenney Tiny Dungeon, Tiny Town, Tiny Farm, Tiny Ski e fonte Kenney Pixel.
-O jogo abre em tela cheia. F11 alterna para janela.
+O jogo abre em tela cheia sem bordas e o cenario preenche diferentes proporcoes sem faixas. F11 alterna para janela.
+Windows + Shift + S e Print Screen podem sobrepor a captura sem minimizar ou pausar automaticamente a partida. Esc continua abrindo a pausa manual.
 
 CAMPANHA: 5 FASES
 1. Cripta: 7 guardioes / facil
@@ -43,6 +44,9 @@ Fantasma: frasco azul nas fases 4 e 5; depois volta a atacar de perto.
 Vermelho: fogo; verde: veneno; cinza: lentidao; azul: teleporte e 3 morcegos.
 Fogo e veneno causam quatro pulsos de meio coracao (2 no total), sem acumular.
 A pocao de cura remove fogo e veneno. As marcas no chao avisam os ataques.
+Os estados aparecem nas laterais: chamas e fumaca desenhadas em pixel art com quatro quadros de animacao, e bolhas verdes maiores e em menor quantidade. A fumaca e semitransparente.
+A fenda contrai e torce a imagem do cenario antes de mover o heroi; a imagem se expande na chegada. O HUD permanece legivel.
+As particulas laterais preservam o centro; os efeitos visuais congelam ao pausar e desaparecem ao acabar o estado.
 Ha no maximo duas fendas por fase; os morcegos invocados tambem precisam ser derrotados.
 
 O modo reabilitacao ainda e uma simulacao pelo teclado: IJKL movem e F simula aperto.

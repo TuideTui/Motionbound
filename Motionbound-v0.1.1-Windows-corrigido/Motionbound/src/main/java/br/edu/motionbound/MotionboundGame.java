@@ -9,6 +9,7 @@ import br.edu.motionbound.game.CampaignLevel;
 import br.edu.motionbound.game.EnemyKind;
 import br.edu.motionbound.game.PotionEffect;
 import br.edu.motionbound.game.GroundArea;
+import br.edu.motionbound.game.CameraDistortion;
 import br.edu.motionbound.game.StatusEffects;
 import br.edu.motionbound.game.DungeonNavigator;
 import br.edu.motionbound.game.CasterAttack;
@@ -22,6 +23,8 @@ import br.edu.motionbound.input.SimulatedSensorSource;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.Graphics;
+import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Graphics;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.GL20;
@@ -32,13 +35,15 @@ import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Array;
-import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.ExtendViewport;
 
 /** Motionbound: phase-one offline dungeon prototype. No Arduino is required. */
 public final class MotionboundGame extends ApplicationAdapter {
     private static final int VIEW_W=384, VIEW_H=216, TILE=16;
     private Screen scene=Screen.MODE_SELECT;
     private Screen resumeScene=Screen.PLAYING;
+    private boolean fullscreenWindow=true;
+    private boolean rendering;
     private int stage=1;
     private float introRemaining;
     private boolean stageComplete;
@@ -46,13 +51,14 @@ public final class MotionboundGame extends ApplicationAdapter {
     private SpriteBatch batch;
     private ShapeRenderer shapes;
     private OrthographicCamera worldCamera;
-    private FitViewport viewport;
+    private ExtendViewport viewport;
     private GameUi ui;
     private final GameUi.View uiView=new GameUi.View();
     private FileHandle saveFile;
     private boolean hasSave;
     private String message="";
     private GameAssets art;
+    private CameraDistortion cameraDistortion;
     private DungeonMap dungeon;
     private DungeonNavigator navigator;
     private ControlSource controls;
@@ -74,6 +80,8 @@ public final class MotionboundGame extends ApplicationAdapter {
     private int defeated,totalEnemies;
     private int summonedBats,riftsCast;
     private float portalX,portalY,portalFx;
+    private boolean teleportPending;
+    private float teleportTargetX,teleportTargetY;
     private int attacks,hits,magicCasts,healsUsed,heartsCollected;
     private static final Color VOID=new Color(.055f,.064f,.10f,1f);
     private static final Color GOLD=new Color(.98f,.75f,.40f,1f);
@@ -149,9 +157,10 @@ public final class MotionboundGame extends ApplicationAdapter {
         batch=new SpriteBatch();
         shapes=new ShapeRenderer();
         worldCamera=new OrthographicCamera();
-        viewport=new FitViewport(VIEW_W,VIEW_H,worldCamera);
+        viewport=new ExtendViewport(VIEW_W,VIEW_H,worldCamera);
         art=new GameAssets();
         ui=new GameUi(art);
+        cameraDistortion=new CameraDistortion();
         // Stable across Gradle, VS Code and the executable JAR's working directories.
         saveFile=Gdx.files.external(".motionbound/saves/expedition.json");
         if(saveFile.exists()) {
@@ -160,7 +169,8 @@ public final class MotionboundGame extends ApplicationAdapter {
         }
         controls=new KeyboardControlSource();
         resetWorld();
-        viewport.update(Gdx.graphics.getWidth(),Gdx.graphics.getHeight(),true);
+        viewport.update(Gdx.graphics.getWidth(),Gdx.graphics.getHeight(),false);
+        updateCamera(1);
         ui.resize(Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
     }
     private void resetWorld() {
@@ -170,13 +180,15 @@ public final class MotionboundGame extends ApplicationAdapter {
         introRemaining=0;stageComplete=false;resumeScene=Screen.PLAYING;cursorVisible=false;
         enemies.clear(); spells.clear();sparks.clear();hearts.clear();deaths.clear();
         vials.clear();splashes.clear();summonedBats=0;riftsCast=0;portalFx=0;
+        teleportPending=false;teleportTargetX=teleportTargetY=0;
         lightning.clear();groundAreas.clear();
         aim.set(0,-1);swing.elapsed=-1;swing.impacted=false;
         attacks=0;hits=0;magicCasts=0;healsUsed=0;heartsCollected=0;
         if(controls instanceof SimulatedSensorSource simulated)simulated.sensors.clearMetrics();
         for(CampaignLevel.Spawn enemy:dungeon.level.spawns(dungeon))spawn(enemy.tileX(),enemy.tileY(),enemy.type());
         totalEnemies=enemies.size; defeated=0;elapsed=0;screenShake=0;
-        worldCamera.position.set(Math.max(VIEW_W/2f,player.x),Math.max(VIEW_H/2f,player.y),0);
+        worldCamera.position.set(cameraCenter(player.x,viewport.getWorldWidth()*worldCamera.zoom,DungeonMap.WIDTH*TILE),
+                cameraCenter(player.y,viewport.getWorldHeight()*worldCamera.zoom,DungeonMap.HEIGHT*TILE),0);
         worldCamera.update();
     }
     private void spawn(int tileX,int tileY,int type) {
@@ -197,6 +209,12 @@ public final class MotionboundGame extends ApplicationAdapter {
         if(introRemaining==0){controls.reset();scene=Screen.PLAYING;resumeScene=scene;}
     }
     @Override public void render() {
+        // Changing window decorations/size can synchronously request a GLFW redraw.
+        if(rendering)return;
+        rendering=true;
+        try {renderFrame();}finally {rendering=false;}
+    }
+    private void renderFrame() {
         float frameDelta=Math.max(0,Gdx.graphics.getDeltaTime());
         float dt=Math.min(frameDelta,1f/30f);
         if(scene!=Screen.PAUSED) uiTime+=dt;
@@ -215,6 +233,9 @@ public final class MotionboundGame extends ApplicationAdapter {
             else update(dt);
         }
         if(scene!=Screen.PAUSED) updateCamera(dt);
+        boolean distort=(scene==Screen.PLAYING||scene==Screen.PAUSED&&resumeScene==Screen.PLAYING)
+                &&cameraDistortion.active(teleportPending,player.effects.riftRemaining);
+        if(distort)cameraDistortion.begin(Gdx.graphics.getBackBufferWidth(),Gdx.graphics.getBackBufferHeight());
         Gdx.gl.glClearColor(VOID.r,VOID.g,VOID.b,1);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
         viewport.apply();
@@ -224,6 +245,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         drawEntities();
         drawWorldEffects();
         drawAmbientLighting();
+        if(distort)cameraDistortion.present(teleportPending,player.effects.riftRemaining);
         uiView.hp=player.hp;uiView.maxHp=player.maxHp;uiView.heals=player.heals;
         uiView.stamina=player.stamina;uiView.mana=player.mana;uiView.elapsed=elapsed;
         uiView.defeated=defeated;uiView.total=totalEnemies;uiView.x=player.x;uiView.y=player.y;
@@ -231,6 +253,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         uiView.dungeon=dungeon;uiView.hasSave=hasSave;uiView.message=message;
         uiView.level=dungeon.level;uiView.introRemaining=introRemaining;
         uiView.effects.copyFrom(player.effects);
+        uiView.teleportPending=teleportPending;
         uiView.mode=mode;uiView.savedMode=savedMode;
         uiView.attacks=attacks;uiView.hits=hits;uiView.heartsCollected=heartsCollected;
         uiView.pressure=0;uiView.pressureAccuracy=0;uiView.pressureSeconds=0;
@@ -267,7 +290,10 @@ public final class MotionboundGame extends ApplicationAdapter {
         player.magicCd=Math.max(0,player.magicCd-dt);
         player.healCd=Math.max(0,player.healCd-dt);
         player.mana=Math.min(100,player.mana+dt*12f);
+        boolean pulling=teleportPending;
+        if(teleportPending&&player.effects.riftRemaining<=StatusEffects.RIFT_RELEASE_TIME)finishTeleport();
         PlayerCommand cmd=controls.read(dt);
+        if(pulling) {cmd.direction.setZero();cmd.attack=cmd.magic=cmd.heal=cmd.sprint=false;}
         updateAim(cmd);
         player.moving=cmd.direction.len2()>.01f;
         player.running=player.moving && cmd.sprint && player.stamina>1;
@@ -307,7 +333,7 @@ public final class MotionboundGame extends ApplicationAdapter {
             Spark p=sparks.get(i);p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;
             if(p.life<=0)sparks.removeIndex(i);
         }
-        if(defeated==totalEnemies && Vector2.dst2(player.x,player.y,dungeon.exitX(),dungeon.exitY())<(18*18)) {
+        if(!teleportPending&&defeated==totalEnemies && Vector2.dst2(player.x,player.y,dungeon.exitX(),dungeon.exitY())<(18*18)) {
             stageComplete=true;controls.reset();scene=dungeon.level.last()?Screen.VICTORY:Screen.LEVEL_COMPLETE;resumeScene=scene;
         }
         if(player.hp<=0)scene=Screen.DEFEAT;
@@ -494,6 +520,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         }
     }
     private boolean teleportAndSummon(boolean firstUse) {
+        if(teleportPending)return false;
         boolean summon=firstUse&&summonedBats<6;
         Array<Vector2> candidates=new Array<>();
         for(int x=4;x<DungeonMap.WIDTH-4;x++)for(int y=4;y<DungeonMap.HEIGHT-4;y++) {
@@ -523,11 +550,18 @@ public final class MotionboundGame extends ApplicationAdapter {
         }
         if(arrival==null)return false;
         portalX=player.x;portalY=player.y;portalFx=.8f;
-        burst(player.x,player.y,ICE,16);player.x=arrival.x;player.y=arrival.y;player.hitInvuln=1.2f;
-        player.effects.apply(PotionEffect.RIFT);burst(player.x,player.y,ICE,20);
+        player.hitInvuln=StatusEffects.RIFT_DURATION;
+        player.effects.apply(PotionEffect.RIFT);
+        teleportPending=true;teleportTargetX=arrival.x;teleportTargetY=arrival.y;
+        swing.elapsed=-1;swing.impacted=false;player.castFx=player.healFx=0;player.moving=false;controls.reset();
         for(Vector2 point:batPositions) {Enemy bat=new Enemy(point.x,point.y,EnemyKind.BAT.ordinal());bat.spawnFx=.8f;bat.attackCd=1.4f;enemies.add(bat);}
         if(summon){summonedBats+=3;totalEnemies+=3;}
-        updateCamera(1);return true;
+        return true;
+    }
+    private void finishTeleport() {
+        player.x=teleportTargetX;player.y=teleportTargetY;teleportPending=false;teleportTargetX=teleportTargetY=0;
+        player.hitInvuln=Math.max(player.hitInvuln,StatusEffects.RIFT_RELEASE_TIME);
+        controls.reset();updateCamera(1);
     }
     private void updateSpells(float dt) {
         for(int i=spells.size-1;i>=0;i--) {
@@ -627,8 +661,8 @@ public final class MotionboundGame extends ApplicationAdapter {
         }
     }
     private void updateCamera(float dt) {
-        float desiredX=MathUtils.clamp(player.x,VIEW_W/2f,DungeonMap.WIDTH*TILE-VIEW_W/2f);
-        float desiredY=MathUtils.clamp(player.y,VIEW_H/2f,DungeonMap.HEIGHT*TILE-VIEW_H/2f);
+        float desiredX=cameraCenter(player.x,viewport.getWorldWidth()*worldCamera.zoom,DungeonMap.WIDTH*TILE);
+        float desiredY=cameraCenter(player.y,viewport.getWorldHeight()*worldCamera.zoom,DungeonMap.HEIGHT*TILE);
         float lerp=Math.min(1f,dt*8.5f);
         worldCamera.position.x=MathUtils.lerp(worldCamera.position.x,desiredX,lerp);
         worldCamera.position.y=MathUtils.lerp(worldCamera.position.y,desiredY,lerp);
@@ -637,14 +671,23 @@ public final class MotionboundGame extends ApplicationAdapter {
             worldCamera.position.y+=MathUtils.random(-screenShake,screenShake);
             screenShake=Math.max(0,screenShake-dt*8);
         }
+        clampCameraToMap();
+    }
+    private static float cameraCenter(float position,float visible,float mapSize) {
+        return visible>=mapSize?mapSize/2:MathUtils.clamp(position,visible/2,mapSize-visible/2);
+    }
+    private void clampCameraToMap() {
+        worldCamera.position.x=cameraCenter(worldCamera.position.x,viewport.getWorldWidth()*worldCamera.zoom,DungeonMap.WIDTH*TILE);
+        worldCamera.position.y=cameraCenter(worldCamera.position.y,viewport.getWorldHeight()*worldCamera.zoom,DungeonMap.HEIGHT*TILE);
         worldCamera.update();
     }
     private void drawMap() {
         batch.setProjectionMatrix(worldCamera.combined);batch.begin();
-        int minX=Math.max(0,MathUtils.floor((worldCamera.position.x-VIEW_W*worldCamera.zoom/2f)/TILE)-2);
-        int maxX=Math.min(DungeonMap.WIDTH-1,MathUtils.floor((worldCamera.position.x+VIEW_W*worldCamera.zoom/2f)/TILE)+2);
-        int minY=Math.max(0,MathUtils.floor((worldCamera.position.y-VIEW_H*worldCamera.zoom/2f)/TILE)-2);
-        int maxY=Math.min(DungeonMap.HEIGHT-1,MathUtils.floor((worldCamera.position.y+VIEW_H*worldCamera.zoom/2f)/TILE)+2);
+        float halfW=viewport.getWorldWidth()*worldCamera.zoom/2,halfH=viewport.getWorldHeight()*worldCamera.zoom/2;
+        int minX=Math.max(0,MathUtils.floor((worldCamera.position.x-halfW)/TILE)-2);
+        int maxX=Math.min(DungeonMap.WIDTH-1,MathUtils.floor((worldCamera.position.x+halfW)/TILE)+2);
+        int minY=Math.max(0,MathUtils.floor((worldCamera.position.y-halfH)/TILE)-2);
+        int maxY=Math.min(DungeonMap.HEIGHT-1,MathUtils.floor((worldCamera.position.y+halfH)/TILE)+2);
         for(int x=minX;x<=maxX;x++) for(int y=minY;y<=maxY;y++) {
             boolean floor=dungeon.isFloor(x,y);
             int tile=floor?dungeon.floorTile(x,y):dungeon.wallTile(x,y);
@@ -890,17 +933,6 @@ public final class MotionboundGame extends ApplicationAdapter {
         }
         for(Splash splash:splashes)pixelRing(splash.x,splash.y,2+(1-splash.life/.5f)*20,splash.effect.color,splash.life*1.5f);
         if(portalFx>0)pixelRing(portalX,portalY,8+(1-portalFx/.8f)*20,ICE,portalFx);
-        if(player.effects.damageEffect!=null) {
-            Color color=player.effects.damageEffect.color;
-            for(int i=0;i<5;i++) {
-                float cycle=(uiTime*1.2f+i*.21f)%1;
-                shapes.setColor(color.r,color.g,color.b,1-cycle*.6f);
-                float x=player.x+MathUtils.sin(i*2+uiTime*3)*6,y=player.y+cycle*17;
-                shapes.rect(Math.round(x),Math.round(y),player.effects.damageEffect==PotionEffect.FIRE?2:3,2);
-            }
-        }
-        if(player.effects.slowRemaining>0)pixelRing(player.x,player.y-3,9,PotionEffect.SLOW.color,.8f);
-        if(player.effects.riftRemaining>0)pixelRing(player.x,player.y,12+MathUtils.sin(uiTime*12)*3,ICE,.8f);
         float portalX=dungeon.exitX(),portalY=dungeon.exitY();
         shapes.setColor(defeated==totalEnemies ? new Color(.25f,.98f,.75f,.3f) : new Color(.5f,.5f,.6f,.15f));
         shapes.rect(portalX-12,portalY-10,24,20);
@@ -1020,11 +1052,18 @@ public final class MotionboundGame extends ApplicationAdapter {
         shapes.end();Gdx.gl.glDisable(GL20.GL_BLEND);
     }
     private void toggleFullscreen() {
-        if(Gdx.graphics.isFullscreen()) Gdx.graphics.setWindowedMode(1280,720);
-        else Gdx.graphics.setFullscreenMode(Gdx.graphics.getDisplayMode());
+        fullscreenWindow=!fullscreenWindow;
+        Graphics.Monitor monitor=Gdx.graphics.getMonitor();
+        Graphics.DisplayMode display=Gdx.graphics.getDisplayMode(monitor);
+        Gdx.graphics.setUndecorated(fullscreenWindow);
+        int width=fullscreenWindow?display.width:1280,height=fullscreenWindow?display.height:720;
+        Gdx.graphics.setWindowedMode(width,height);
+        ((Lwjgl3Graphics)Gdx.graphics).getWindow().setPosition(
+                monitor.virtualX+(display.width-width)/2,monitor.virtualY+(display.height-height)/2);
     }
     private SaveData captureSave() {
         SaveData data=new SaveData();
+        data.teleportPending=teleportPending;data.teleportTargetX=teleportTargetX;data.teleportTargetY=teleportTargetY;
         data.stage=stage;data.introRemaining=introRemaining;data.stageComplete=stageComplete;
         data.summonedBats=summonedBats;data.riftsCast=riftsCast;data.effects.copyFrom(player.effects);
         data.x=player.x;data.y=player.y;data.hp=player.hp;data.heals=player.heals;
@@ -1089,6 +1128,7 @@ public final class MotionboundGame extends ApplicationAdapter {
             introRemaining=data.introRemaining;stageComplete=data.stageComplete;
             summonedBats=data.summonedBats;riftsCast=data.riftsCast;totalEnemies=dungeon.level.enemyCount()+summonedBats;
             player.effects.copyFrom(data.effects);
+            teleportPending=data.teleportPending;teleportTargetX=data.teleportTargetX;teleportTargetY=data.teleportTargetY;
             player.x=data.x;player.y=data.y;player.hp=data.hp;player.heals=data.heals;
             player.facing=data.facing;player.stamina=data.stamina;player.mana=data.mana;
             player.hitInvuln=data.hitInvuln;player.attackCd=data.attackCd;
@@ -1139,8 +1179,9 @@ public final class MotionboundGame extends ApplicationAdapter {
     @Override public void resize(int width,int height) {
         if(width<=0||height<=0)return;
         viewport.update(width,height,false);ui.resize(width,height);
+        clampCameraToMap();
     }
     @Override public void dispose() {
-        batch.dispose();shapes.dispose();art.dispose();ui.dispose();
+        batch.dispose();shapes.dispose();cameraDistortion.dispose();art.dispose();ui.dispose();
     }
 }

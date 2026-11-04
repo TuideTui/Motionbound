@@ -15,23 +15,24 @@ public final class SaveDataTest {
         require(loaded.enemies.first().kickX==CombatRules.MAGIC_KNOCKBACK,"Magic knockback survives saving");
         require(loaded.spells.size == 1 && loaded.spells.first().vy == 170, "Active projectile");
         require(loaded.magicCd == .5f && loaded.hitInvuln == .4f, "Combat timers");
-        require(loaded.version==7&&loaded.hearts.size==1&&loaded.heartsCollected==1,"Heart drops persisted");
+        require(loaded.version==8&&loaded.hearts.size==1&&loaded.heartsCollected==1,"Heart drops persisted");
         require(loaded.swingTime==.13f&&!loaded.swingImpacted&&loaded.attacks==5&&loaded.hits==3,"In-progress swing persisted");
         SaveData legacy=SaveData.decode("{\"version\":1,\"x\":120,\"y\":136,\"hp\":4,\"heals\":2,\"facing\":1,\"defeated\":6,\"enemies\":[{\"x\":216,\"y\":200,\"hp\":1,\"type\":0}],\"spells\":[]}");
-        require(legacy.version==7&&legacy.stage==1&&legacy.aimY==1&&legacy.hearts.isEmpty(),"Version one migration");
-        SaveData versionTwo=SaveData.decode(data.encode().replace("\"version\": 7","\"version\": 2"));
-        require(versionTwo.version==7&&versionTwo.stage==1&&versionTwo.introRemaining==0,"Version two migration keeps the original stage");
+        require(legacy.version==8&&legacy.stage==1&&legacy.aimY==1&&legacy.hearts.isEmpty(),"Version one migration");
+        SaveData versionTwo=SaveData.decode(data.encode().replace("\"version\": 8","\"version\": 2"));
+        require(versionTwo.version==8&&versionTwo.stage==1&&versionTwo.introRemaining==0,"Version two migration keeps the original stage");
         villageMigration();
         fortressMigration();
         casterCheckpoint();
         groundAreaCheckpoint();
+        teleportCheckpoint();
         data.hp=4.5f;data.effects.apply(PotionEffect.POISON);data.effects.advance(.4f);
         SaveData poisoned=SaveData.decode(data.encode());
         require(poisoned.hp==4.5f&&poisoned.effects.ticksRemaining==4&&poisoned.effects.damageEffect==PotionEffect.POISON,"Half hearts and afflictions round-trip");
         data.hp=4;data.effects.cleanseDamage();
 
         reject("null"); reject("{}"); reject("{version:3}"); reject("{hp:4,class:java.lang.Runtime}");
-        data.version = 9; invalid(data); data.version = 7;
+        data.version = 9; invalid(data); data.version = 8;
         data.stage=6;invalid(data);data.stage=1;
         data.introRemaining=Float.NaN;invalid(data);data.introRemaining=0;
         data.x = Float.NaN; invalid(data); data.x = 120;
@@ -66,7 +67,7 @@ public final class SaveDataTest {
         SaveData.EnemyData enemy=new SaveData.EnemyData();enemy.x=10*16+8;enemy.y=20*16+8;enemy.type=1;enemy.hp=3;old.enemies.add(enemy);
         com.badlogic.gdx.utils.Json json=new com.badlogic.gdx.utils.Json();json.setTypeName(null);json.setUsePrototypes(false);
         SaveData migrated=SaveData.decode(json.toJson(old));DungeonMap map=new DungeonMap(5);
-        require(migrated.version==7&&migrated.stage==5&&migrated.defeated==21&&migrated.hp==5&&migrated.mana==43,"Old fortress retains campaign progress");
+        require(migrated.version==8&&migrated.stage==5&&migrated.defeated==21&&migrated.hp==5&&migrated.mana==43,"Old fortress retains campaign progress");
         require(map.canStand(migrated.x,migrated.y,5),"Old fortress position is relocated out of new ruins");
     }
     private static void casterCheckpoint() {
@@ -93,7 +94,7 @@ public final class SaveDataTest {
         mage.windup=.4f;mage.targetX=120;mage.targetY=136;mage.potion=PotionEffect.FIRE;
         com.badlogic.gdx.utils.Json json=new com.badlogic.gdx.utils.Json();json.setTypeName(null);json.setUsePrototypes(false);
         restored=SaveData.decode(json.toJson(data));
-        require(restored.version==7&&restored.defeated==6&&restored.hp==4
+        require(restored.version==8&&restored.defeated==6&&restored.hp==4
                 &&restored.enemies.first().attack==CasterAttack.POISON_VIAL&&restored.enemies.first().potion==PotionEffect.POISON,
                 "Version-five pending mage cast migrates to green while preserving progress");
     }
@@ -106,7 +107,7 @@ public final class SaveDataTest {
         SaveData.HeartData heart=new SaveData.HeartData();heart.x=old.x;heart.y=old.y;old.hearts.add(heart);
         com.badlogic.gdx.utils.Json json=new com.badlogic.gdx.utils.Json();json.setTypeName(null);json.setUsePrototypes(false);
         SaveData migrated=SaveData.decode(json.toJson(old));DungeonMap map=new DungeonMap(2);
-        require(migrated.version==7&&migrated.stage==2&&migrated.hp==4&&migrated.defeated==1&&migrated.enemies.size==9,"Old village retains progress");
+        require(migrated.version==8&&migrated.stage==2&&migrated.hp==4&&migrated.defeated==1&&migrated.enemies.size==9,"Old village retains progress");
         require(map.canStand(migrated.x,migrated.y,5)&&map.canStand(migrated.enemies.first().x,migrated.enemies.first().y,5)
                 &&map.canStand(migrated.hearts.first().x,migrated.hearts.first().y,0),"Remodelled village relocates blocked save positions");
         require(migrated.mana==37&&migrated.elapsed==92&&migrated.heals==2,"Village migration preserves resources and time");
@@ -128,10 +129,25 @@ public final class SaveDataTest {
         SaveData.GroundFireData oldFire=new SaveData.GroundFireData();oldFire.x=120;oldFire.y=136;oldFire.remaining=2.3f;data.groundFires.add(oldFire);
         com.badlogic.gdx.utils.Json json=new com.badlogic.gdx.utils.Json();json.setTypeName(null);json.setUsePrototypes(false);
         restored=SaveData.decode(json.toJson(data));
-        require(restored.version==7&&restored.groundFires.isEmpty()&&restored.groundAreas.size==1
+        require(restored.version==8&&restored.groundFires.isEmpty()&&restored.groundAreas.size==1
                 &&restored.groundAreas.first().effect==PotionEffect.FIRE&&restored.groundAreas.first().remaining==2.3f
                 &&restored.hp==4&&restored.defeated==6,"Version-six flames migrate without restarting their lifetime or losing progress");
         oldFire.remaining=4.1f;reject(json.toJson(data));
+    }
+    private static void teleportCheckpoint() {
+        SaveData data=checkpoint();data.effects.apply(PotionEffect.RIFT);data.effects.advance(.1f);
+        data.teleportPending=true;data.teleportTargetX=130;data.teleportTargetY=136;data.hitInvuln=1.3f;
+        SaveData restored=SaveData.decode(data.encode());
+        require(restored.version==8&&restored.teleportPending&&restored.teleportTargetX==130
+                &&restored.effects.riftRemaining==data.effects.riftRemaining&&restored.x==120,"A pending suction saves its source, destination and exact clock");
+        data.teleportTargetX=0;invalid(data);data.teleportTargetX=130;
+        data.effects.riftRemaining=StatusEffects.RIFT_RELEASE_TIME;invalid(data);
+        data.effects.riftRemaining=1.3f;data.introRemaining=1;invalid(data);
+        data=checkpoint();data.version=7;data.effects.apply(PotionEffect.RIFT);data.effects.advance(.4f);
+        com.badlogic.gdx.utils.Json json=new com.badlogic.gdx.utils.Json();json.setTypeName(null);json.setUsePrototypes(false);
+        restored=SaveData.decode(json.toJson(data));
+        require(restored.version==8&&!restored.teleportPending&&restored.teleportTargetX==0
+                &&restored.effects.riftRemaining==data.effects.riftRemaining&&restored.x==120&&restored.hp==4,"Version-seven arrivals migrate without a second teleport or loss of progress");
     }
 
     private static SaveData checkpoint() {
