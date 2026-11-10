@@ -3,6 +3,7 @@ package br.edu.motionbound;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 import com.badlogic.gdx.Graphics;
+import com.badlogic.gdx.Files;
 
 /** Entry point for Windows, Linux and macOS desktop builds. */
 public final class DesktopLauncher {
@@ -29,6 +30,7 @@ public final class DesktopLauncher {
         cfg.useVsync(true);
         cfg.setForegroundFPS(60);
         cfg.setIdleFPS(60);
+        cfg.setPreferencesConfig(".motionbound/preferences",Files.FileType.External);
         cfg.setWindowIcon("icon.png");
         return cfg;
     }

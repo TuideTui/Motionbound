@@ -25,8 +25,11 @@ public final class SaveData {
     public StatusEffects effects=new StatusEffects();
     public GameMode mode=GameMode.CONVENTIONAL;
     public boolean simulatedSensors;
+    public boolean physicalController;
     public float aimX, aimY=-1, swingTime=-1, swingX, swingY=-1, castFx, healFx;
     public boolean swingImpacted;
+    public GuidedStrike guidedStrike=new GuidedStrike();
+    public int guidedTargetIndex=-1;
     public int attacks, hits, magicCasts, healsUsed, heartsCollected;
     public float pressureSeconds, pressureInBandSeconds;
     public Array<EnemyData> enemies = new Array<>();
@@ -133,7 +136,8 @@ public final class SaveData {
                 ||groundAreas==null||groundAreas.size>64
                 || !range(introRemaining,CampaignLevel.INTRO_SECONDS)
                 || stageComplete&&(defeated!=total||introRemaining>0||com.badlogic.gdx.math.Vector2.dst2(x,y,map.exitX(),map.exitY())>=18*18)
-                || mode==null || simulatedSensors!=(mode==GameMode.REHABILITATION) || !unit(aimX,aimY) || !unit(swingX,swingY)
+                || mode==null || (mode==GameMode.REHABILITATION ? simulatedSensors==physicalController : simulatedSensors||physicalController)
+                || !unit(aimX,aimY) || !unit(swingX,swingY)
                 || !(swingTime==-1||range(swingTime,MeleeSwing.DURATION))
                 || !range(castFx,.4f)||!range(healFx,.5f)||hearts==null||hearts.size>total
                 || attacks<0||hits<0||hits>attacks||magicCasts<0||healsUsed<0||healsUsed>3
@@ -141,6 +145,14 @@ public final class SaveData {
                 || !range(pressureSeconds,31536000)||!range(pressureInBandSeconds,pressureSeconds)
                 || (swingTime>=0&&swingImpacted!=(swingTime>=MeleeSwing.IMPACT)))
             throw new IllegalArgumentException("Save inválido ou incompatível");
+        if(guidedStrike==null||guidedTargetIndex< -1||guidedTargetIndex>=enemies.size)
+            throw new IllegalArgumentException("Invalid guided target");
+        guidedStrike.validate();
+        if(guidedStrike.active()&&(mode!=GameMode.REHABILITATION||teleportPending||stageComplete||introRemaining>0)
+                ||guidedStrike.phase==GuidedStrike.STRIKE&&(swingTime<0||swingImpacted)
+                ||guidedStrike.phase==GuidedStrike.APPROACH&&swingTime>=0&&swingTime<MeleeSwing.DURATION
+                ||guidedStrike.phase==GuidedStrike.RETREAT&&!swingImpacted)
+            throw new IllegalArgumentException("Inconsistent guided strike");
         effects.validate();int livingBats=0;
         if(!range(teleportTargetX,DungeonMap.WIDTH*16)||!range(teleportTargetY,DungeonMap.HEIGHT*16)
                 ||teleportPending&&(!position(map,teleportTargetX,teleportTargetY,5)||effects.riftRemaining<=StatusEffects.RIFT_RELEASE_TIME

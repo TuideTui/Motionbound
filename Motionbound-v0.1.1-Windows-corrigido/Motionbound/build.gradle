@@ -26,6 +26,7 @@ repositories {
 ext.gdxVersion = '1.14.2'
 
 dependencies {
+    implementation 'com.fazecast:jSerialComm:2.11.4'
     implementation "com.badlogicgames.gdx:gdx:${gdxVersion}"
     implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:${gdxVersion}"
     runtimeOnly "com.badlogicgames.gdx:gdx-platform:${gdxVersion}:natives-desktop"
@@ -108,6 +109,21 @@ tasks.register('verifyEffects', JavaExec) {
 }
 
 tasks.named('check') { dependsOn 'verifySave', 'verifyCombat', 'verifyCampaign', 'verifyEffects' }
+
+tasks.register('verifyController', JavaExec) {
+    group = 'verification'
+    dependsOn verificationClasses
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'br.edu.motionbound.EdgeControllerTest'
+}
+tasks.register('verifyEdgeUsb', JavaExec) {
+    group = 'verification'
+    description = 'Read the real Edge USB stream for a second; requires the device and a closed Serial Monitor.'
+    dependsOn verificationClasses
+    classpath = sourceSets.verification.runtimeClasspath
+    mainClass = 'br.edu.motionbound.EdgeUsbCheck'
+}
+tasks.named('check') { dependsOn 'verifyController' }
 
 tasks.register('verifyDesktop', JavaExec) {
     group = 'verification'

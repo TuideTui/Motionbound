@@ -6,7 +6,7 @@
 
 O projeto busca explorar a **gamificação de atividades motoras de mão, punho e antebraço**, reunindo uma experiência de jogo com indicadores de execução e evolução dos movimentos. Trata-se de um protótipo educacional, não de uma ferramenta clínica validada.
 
-> **Estado atual: campanha de cinco fases para Windows.** Mapas próprios, dificuldade crescente, apresentação e contagem regressiva pixeladas, combate com mira livre, magia com recuo, cura, pausa e salvamento entre fases. A abertura oferece modo convencional e simulação do modo reabilitação. **USB/Serial, firmware e calibração com os sensores físicos ainda não foram implementados.** O nome do JAR continua `Motionbound-0.1.1-all.jar`.
+> **Estado atual: campanha de cinco fases para Windows com controle USB.** A BlackBoard Edge controla o movimento por inclinação; o APDS-9960 reconhece espada/magia e o Keypad navega pelos menus. O jogo oferece calibração, sensibilidade, troca/inversão de eixos, cura automática e pausa por desconexão. O modo convencional e a bancada de simulação continuam disponíveis. O [firmware e as instruções do controle](firmware/README.md) estão incluídos. O nome do JAR continua `Motionbound-0.1.1-all.jar`.
 
 **Interface atualizada:** abertura em tela cheia, fonte Kenney Pixel, vida em corações, vigor com raio e segmentos, mana em cristais, molduras de pedra/bronze e menu `Esc` em pergaminho. A cripta tem quatro ambientes decorados, tochas animadas e detalhes do Tiny Dungeon e Tiny Town já incluídos. **Salvar e sair** e **Continuar expedição** mantêm a partida. Consulte [Interface e salvamento](docs/INTERFACE-E-SALVAMENTO.md) e [Arte e créditos](docs/ASSETS.md).
 
@@ -48,9 +48,15 @@ O script utiliza explicitamente a pasta onde está o arquivo `build.gradle`, ind
 
 ### Combate com mouse e escolha de modo
 
-A abertura oferece **Modo convencional** e **Modo reabilitação**. O convencional usa os controles abaixo. Na reabilitação, **Experimentar simulação** permite testar uma bancada virtual: `I J K L` simulam inclinação, `F` simula aperto e `Shift + F` simula pressão acima da faixa. Solte e aperte novamente para cada golpe. A mira busca inimigos próximos na direção da inclinação; o personagem e os inimigos se movem mais lentamente. Nessa demonstração, a cura vem da coleta de corações e a magia fica para a próxima etapa.
+A abertura oferece **Modo convencional** e **Modo reabilitação**. O convencional usa os controles abaixo. Na reabilitação com a Edge, inclinação move e gestos acionam espada/magia com mira assistida. Sem a manopla, **Experimentar simulação** permite testar uma bancada virtual: `I J K L` simulam inclinação, `F` simula aperto e `Shift + F` simula pressão acima da faixa. Solte e aperte novamente para cada golpe. A bancada não simula magia; o controle físico já a aciona por gesto. **A cura é automática com 1 coração ou menos, enquanto o personagem estiver vivo:** consome uma das 3 cargas da fase, recupera 2 corações e remove fogo/veneno, com intervalo de 1,7 segundo. Um aviso pixelado no canto esquerdo informa as cargas restantes por 4 segundos; o contador também aparece no HUD. Pausar congela o aviso e a cura; o save preserva as cargas. Coletar corações continua recuperando vida sem gastar cargas. No modo convencional, a cura permanece manual pelo Espaço.
 
-**O dispositivo ainda não está conectado:** a simulação alimenta `SensorControlSource` com amostras normalizadas, sem usar o mouse. O processamento inclui suavização, zona neutra, limiares separados de aperto/soltura e interrupção do movimento ao perder amostras. USB/Serial, firmware para ESP32 + MPU6050 + FSR402 e calibração real serão implementados após a chegada das peças. Os indicadores de pressão são dados artificiais, identificados na interface e no save.
+**Controle físico:** feche o Monitor Serial, conecte a Edge com o firmware atualizado e escolha Reabilitação. Confirme a calibração e mantenha a mão confortável e parada por 2 segundos; depois confirme para iniciar. A Edge é localizada pelo adaptador USB Silicon Labs e transmite a 115200 baud. O Keypad funciona desde a seleção de modo: 1 pausa/volta, 2 anterior, 3 confirma, 4 próximo, incluindo abas e fichas. Gestos horizontais acionam a espada; para cima, a magia. Em Ajustar controle (também nas Configurações da pausa), altere sensibilidade, troca de eixos e inversões. Configurações são preservadas em `.motionbound/preferences`; a posição neutra é recalibrada em cada conexão. Sem dados válidos por 0,5 segundo ou com falha em qualquer sensor, a partida pausa e exige recalibração para retomar. Nenhum indicador de pressão é atribuído ao dispositivo físico: ele usa acelerômetro e gestos, sem FSR. Saves distinguem `physicalController` de `simulatedSensors`.
+
+**Bancada virtual, sem a Edge:** a simulação usa `SensorControlSource`, suavização, zona neutra, limiares separados de aperto/soltura e interrupção ao perder amostras. IJKL e F são recursos de teste, identificados na interface e no save. A implementação USB usa `EdgeController`, protocolo `MB1`, validação de pacotes, sequência, identificação de reinício e contadores de gestos, com recepção fora da renderização. A biblioteca serial é [jSerialComm 2.11.4](https://fazecast.github.io/jSerialComm/).
+
+**Corrida automática com a Edge:** manter inclinação forte na mesma direção principal por 4 segundos ativa a corrida, inclusive ao alternar entre suas duas diagonais. A contagem começa a partir de 60% da faixa de sensibilidade configurada, considerando o maior eixo; uma inclinação leve nunca inicia o contador. Depois de iniciada, a faixa entre 40% e 60% mantém a intenção, evitando oscilações. Aliviar abaixo de 40%, voltar ao neutro ou sair da direção principal reinicia a contagem. O indicador pixelado junto ao vigor preenche quatro segmentos, mostra os segundos restantes e muda para **ATIVA** durante a corrida. A velocidade aumenta de 54 para 85 unidades por segundo, preservando a direção e a suavização existentes; correr consome vigor. Quando ele acaba, o HUD pede **RELAXE**: alivie a mão antes de iniciar outra contagem, evitando corridas em pequenos pulsos durante a recuperação. Pausa, calibração, troca de fase, carregamento e perda de conexão limpam o contador; tempo em menus não conta. O firmware atual já fornece todos os dados necessários, sem nova gravação.
+
+**Espada guiada na reabilitação:** o inimigo visível mais próximo, em qualquer direção, recebe uma marca pixelada até 3 vezes o alcance da espada (96,6 unidades). Dourado indica avanço: o gesto lateral aproxima o herói e então inicia o golpe. Verde indica combate próximo: golpe imediato, seguido de recuo de até 18 unidades após o impacto. A espada continua causando 1 de dano a todos os inimigos dentro de seu arco de 120° e alcance normal de 32,2 unidades; o círculo auxiliar não causa dano. Paredes bloqueiam a marcação e interrompem avanços/recuos, com colisões verificadas a cada 2 unidades. A direção acompanha apenas o alvo escolhido durante o avanço, com distância total limitada, e fica travada durante o golpe. Cada ataque guiado tem intervalo de 0,8 segundo e breve proteção durante o deslocamento e a chegada; efeitos periódicos continuam ativos. Sem alvo, o gesto executa o golpe comum. Pausa congela a ação, saves preservam avanço/golpe/recuo sem repetir o impacto, e teletransporte ou derrota cancelam a assistência. O movimento da Edge e o firmware permanecem os mesmos; a simulação de reabilitação também usa a assistência.
 
 | Tecla | Ação |
 | --- | --- |
@@ -103,13 +109,19 @@ O contra-ataque cinza do bruxo viaja em linha direta e pode acertar durante o vo
 
 A abertura usa **tela cheia sem bordas**, permitindo sobrepor a ferramenta de captura do Windows (`Windows + Shift + S` ou `Print Screen`) sem minimizar o jogo. Perder o foco não pausa automaticamente a partida; a pausa manual continua em `Esc`. `F11` alterna entre tela cheia sem bordas e janela com moldura.
 
+**Acabamento visual da jornada:** corações coletados dão um salto e voam em curva até o coração correspondente no HUD, que pulsa na chegada. A recuperação de vida acontece imediatamente e uma única vez; o voo dura 0,8 segundo, acompanha mudanças no tamanho da janela e congela ao pausar. Dano quebra visualmente os corações perdidos; vigor recuperado ilumina seus segmentos, mana consumida deixa um rastro nos cristais, e a magia recebe um destaque quando o intervalo termina e há mana suficiente para usá-la.
+
+Os impactos de espada e magia têm faíscas distintas e um breve brilho no inimigo. Golpes fatais recebem uma pausa de impacto de 45 ms. Esqueletos se desmontam, slimes se achatam e se desfazem, fantasmas evaporam, morcegos se dispersam e os demais inimigos tombam. A preparação dos ataques inclui inclinação do corpo, frascos erguidos e o cajado do mago acumulando energia. A saída fecha uma íris de blocos ao redor do personagem; a fase seguinte se revela por uma abertura pixelada antes da contagem terminar. Menus têm marcadores animados, transições de pergaminho entre páginas e abas e resultados revelados em sequência. A vegetação balança, bandeiras ondulam, a água do poço cintila e cada ambiente tem partículas discretas, incluindo neve, poeira e pequenos insetos.
+
+**Conforto visual:** em `Esc → Configurações → Efeitos reduzidos`, é possível desligar tremores, flashes de impacto, pausa de impacto e distorção de teleporte, além de reduzir partículas e movimento da interface e da vegetação. O modo reabilitação começa com essa opção ligada; uma escolha manual passa a valer para os dois modos e é preservada entre sessões em `.motionbound/preferences`, na pasta do usuário. A configuração altera a apresentação visual; danos, efeitos dos frascos, inimigos, cura e controles mantêm suas regras.
+
 O **fantasma recebe o frasco azul nas fases 4 e 5**, com uma tentativa por fantasma e até duas tentativas de fenda por fase, no máximo seis morcegos adicionais. Depois do arremesso, volta ao combate próximo. O redemoinho pode teleportar novamente após a chegada e sua proteção breve; cada fenda invoca seus três morcegos apenas na primeira ativação. Assim, voltar ao mesmo redemoinho continua perigoso sem gerar ondas infinitas. Os morcegos só agem após sua animação de aparição, entram na contagem necessária para liberar a saída e não deixam corações. Os primeiros mapas introduzem as criaturas gradualmente; a fase final combina os tipos. **Esc > Bestiário > Frascos** explica as áreas, durações e regras de reaplicação.
 
 Cada guardião derrotado tem **30% de chance de deixar um coração no chão**; os morcegos invocados não deixam itens. A coleta recupera **1 coração perdido**, até o limite atual de 6; ela não aumenta a vida máxima. Com vida cheia, o item permanece no chão. Corações, ataques, preparações dos inimigos, frascos em voo, raios, sequência de disparos, fogo no chão, efeitos e invocações são preservados no salvamento. Saves dos formatos 1 e 2 continuam na cripta da fase 1; saves dos formatos 3, 4, 5, 6 e 7 mantêm a fase e o progresso. Todos são convertidos para o formato 8 no próximo salvamento. Na vila e na fortaleza reformuladas, posições antigas que coincidam com construções são transferidas para o chão livre mais próximo. Vida, recursos e inimigos derrotados são preservados. Existe um único espaço de save: iniciar outro modo não apaga o anterior, mas **Salvar e sair** o substitui.
 
 ### Experimentar e comparar
 
-**Esc > Tutorial** apresenta duas abas independentes: **Modo Convencional** e **Modo Reabilitação**. As teclas e os botões do mouse usam os ícones oficiais do [Kenney Input Prompts Pixel](https://kenney.nl/assets/input-prompts-pixel), incluídos no projeto com sua licença CC0. A aba de reabilitação ilustra inclinação, movimentos laterais e aperto, e explica os comandos da simulação atual. Ler outra aba não altera o modo da partida. USB, calibração e gestos para magia/cura continuam em preparação.
+**Esc > Tutorial** apresenta duas abas independentes: **Modo Convencional** e **Modo Reabilitação**. As teclas e os botões do mouse usam os ícones oficiais do [Kenney Input Prompts Pixel](https://kenney.nl/assets/input-prompts-pixel), incluídos no projeto com sua licença CC0. A aba de reabilitação ilustra inclinação, gestos de espada/magia, Keypad e cura automática. Ler outra aba não altera o modo da partida. O Keypad percorre as abas e confirma sua seleção sem teclado ou mouse.
 
 **Esc > Bestiário** separa **Bestiário** e **Frascos** em catálogos. Cada uma das sete criaturas e dos quatro frascos tem uma ficha **Saiba mais**, com comportamento, dano/duração e estratégias. Clique nos cartões ou navegue com **Tab / Cima / Baixo** e confirme com **Enter**. **Esquerda / Direita** troca a aba; **Esc** fecha a ficha, depois volta ao resumo da expedição. A aventura permanece pausada durante a leitura.
 
@@ -170,16 +182,16 @@ O jogador controlará um personagem em uma aventura por masmorras e cenários de
 
 ### 🕹️ Controles por movimentos físicos
 
-A associação inicial entre movimentos e ações será testada e ajustada após a montagem do protótipo:
+A associação atual entre movimentos e ações é ajustável nos testes do protótipo:
 
 | Movimento captado | Ação planejada no jogo | Aspecto motor observado |
 | --- | --- | --- |
 | Inclinar o controlador | Andar na direção correspondente | Direção e amplitude |
-| Aumentar a inclinação dentro de uma faixa confortável | Correr | Controle gradual do movimento |
-| Pressionar um sensor de preensão | Ataque básico | Controle da pressão |
-| Manter pressão por um intervalo curto | Ataque carregado | Manutenção da pressão |
-| Rotacionar o punho | Lançar magia | Rotação e precisão |
-| Manter a posição estável por alguns segundos | Ativar cura | Estabilidade |
+| Sustentar inclinação forte por 4 segundos | Correr, consumindo vigor | Direção sustentada |
+| Passar a mão horizontalmente sobre o APDS | Ataque básico | Movimento lateral |
+| Passar a mão para cima sobre o APDS | Lançar magia | Movimento direcional |
+| Pressionar os quatro botões do Keypad | Pausa e navegação por menus | Coordenação dos dedos |
+| Vida em 1 coração ou menos | Cura automática limitada a 3 cargas por fase | Permite concentrar-se nos movimentos |
 
 As ações deverão ser executadas **pelo dispositivo físico**, sem exigir teclado ou controle convencional durante a partida. Controles temporários de teste podem ser utilizados apenas nas primeiras etapas de desenvolvimento.
 
@@ -187,12 +199,12 @@ As ações deverão ser executadas **pelo dispositivo físico**, sem exigir tecl
 
 O protótipo deverá captar movimentos do jogador, processá-los e enviá-los ao aplicativo em Java/libGDX.
 
-**Componentes em avaliação:**
+**Componentes do protótipo:**
 
-- **Arduino ou ESP32:** placa responsável pela leitura dos sensores;
-- **MPU6050:** sensor inercial para estimar inclinação, rotação e movimentação;
-- **sensor de pressão/preensão:** para reconhecer comandos de ataque;
-- **conexão USB/Serial:** canal inicial proposto para enviar os dados ao jogo.
+- **BlackBoard Edge (ESP32):** placa com acelerômetro MMA8452Q integrado;
+- **BRIICK APDS-9960:** sensor óptico para gestos direcionais;
+- **BRIICK Keypad:** quatro botões para menus;
+- **conexão USB/Serial:** alimentação e dados em um cabo; os módulos usam os cabos BRIICK.
 
 **Fluxo planejado:**
 

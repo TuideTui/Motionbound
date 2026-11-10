@@ -17,6 +17,15 @@ Arte ja incluida: Kenney Tiny Dungeon, Tiny Town, Tiny Farm, Tiny Ski e fonte Ke
 O jogo abre em tela cheia sem bordas e o cenario preenche diferentes proporcoes sem faixas. F11 alterna para janela.
 Windows + Shift + S e Print Screen podem sobrepor a captura sem minimizar ou pausar automaticamente a partida. Esc continua abrindo a pausa manual.
 
+ACABAMENTO VISUAL
+Coracoes coletados saltam e voam ate o HUD; a vida e recuperada imediatamente, uma unica vez.
+Vida, vigor e mana reagem ao uso. A magia recebe um destaque quando pode ser usada novamente.
+Inimigos tem impactos e derrotas diferentes, com preparo de ataques mais visivel.
+As fases fecham e abrem com uma transicao pixelada. Menus e resultados tem pequenas animacoes.
+Vegetacao, bandeiras, agua e particulas dao movimento aos cenarios.
+Esc > Configuracoes > Efeitos reduzidos: reduz tremores, flashes, particulas e movimento e desliga a distorcao do teleporte.
+A opcao comeca ligada no modo reabilitacao; sua escolha manual e salva para as proximas sessoes.
+
 CAMPANHA: 5 FASES
 1. Cripta: 7 guardioes / facil
 2. Vila: 10 guardioes / moderado
@@ -49,7 +58,20 @@ A fenda contrai e torce a imagem do cenario antes de mover o heroi; a imagem se 
 As particulas laterais preservam o centro; os efeitos visuais congelam ao pausar e desaparecem ao acabar o estado.
 Ha no maximo duas fendas por fase; os morcegos invocados tambem precisam ser derrotados.
 
-O modo reabilitacao ainda e uma simulacao pelo teclado: IJKL movem e F simula aperto.
-A conexao USB/ESP32 e calibracao real aguardam a chegada das pecas.
+No modo reabilitacao, a Edge conecta pelo USB; feche o Monitor Serial antes de abrir o jogo.
+Calibre a mao parada por 2 segundos e confirme Iniciar com a manopla.
+Incline para mover; gesto lateral no APDS ataca; gesto para cima lanca magia.
+Incline forte por 4 segundos na mesma direcao (ou suas diagonais) para correr, gastando vigor.
+O contador junto ao vigor mostra a preparacao; ATIVA indica corrida. Inclinar pouco apenas anda.
+A contagem comeca em 60% da faixa; aliviar abaixo de 40%, parar ou mudar a direcao reinicia.
+Ao esgotar o vigor, RELAXE pede aliviar a mao para preparar outra corrida.
+Keypad: 1 pausa/volta, 2 anterior, 3 confirma, 4 proximo (inclusive abas e fichas).
+Configuracoes > Controle USB permite calibrar, mudar sensibilidade, trocar/inverter os eixos.
+Sem dados do controle por 0,5 segundo, a partida pausa; recalibre para retomar.
+Sem a Edge, a simulacao extra usa IJKL para mover e F para simular aperto.
+A cura e automatica ao ficar com 1 coracao ou menos, sem reviver um personagem derrotado.
+Ha 3 cargas por fase: cada uma recupera 2 coracoes e remove fogo/veneno (intervalo de 1,7s).
+Um aviso animado no canto esquerdo e o HUD mostram as curas restantes; a pausa congela o aviso.
+O firmware esta em firmware/MotionboundDiagnostico; instrucoes em firmware/README.md.
 
 Nenhum commit foi feito: os commits do GitHub continuam sob controle do aluno.

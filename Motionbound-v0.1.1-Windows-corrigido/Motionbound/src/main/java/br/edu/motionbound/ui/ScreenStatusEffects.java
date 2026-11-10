@@ -21,6 +21,8 @@ public final class ScreenStatusEffects implements Disposable {
     private final float[] strength=new float[TYPES.length],phase=new float[TYPES.length];
     private float width,height,band,density;
     private SpriteBatch batch;
+    private boolean reduced;
+    public void setReduced(boolean reduced){this.reduced=reduced;}
 
     public ScreenStatusEffects(Texture pixel,Texture glow) {
         this.pixel=pixel;this.glow=glow;
@@ -46,10 +48,12 @@ public final class ScreenStatusEffects implements Disposable {
             int spacing=type==PotionEffect.FIRE?90:type==PotionEffect.SLOW?60:56;
             int count=MathUtils.clamp((int)(height/spacing),8,24);
             for(int side=0;side<2;side++)for(int n=0;n<count;n++) {
+                if(reduced&&n%2==1)continue;
                 int seed=n+side*97+type.ordinal()*211;
                 float life=type==PotionEffect.FIRE?3.8f+noise(seed+11)*2.4f:type==PotionEffect.SLOW?6+noise(seed+11)*4:3+noise(seed+11)*1.8f;
                 float age=fraction(time/life+noise(seed+5))*life,t=age/life,s=noise(seed+31)*MathUtils.PI2;
                 float alpha=opacity*MathUtils.clamp(age/.16f,0,1)*MathUtils.clamp((life-age)/.35f,0,1);
+                if(reduced)alpha*=.55f;
                 float depth,y;
                 if(type==PotionEffect.POISON) {
                     depth=band*.5f+MathUtils.sin(age*1.8f+s)*band*.17f+MathUtils.sin(age*.6f+s)*4;

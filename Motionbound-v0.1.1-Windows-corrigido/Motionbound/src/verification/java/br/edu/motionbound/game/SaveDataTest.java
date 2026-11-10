@@ -26,6 +26,7 @@ public final class SaveDataTest {
         casterCheckpoint();
         groundAreaCheckpoint();
         teleportCheckpoint();
+        guidedCheckpoint();
         data.hp=4.5f;data.effects.apply(PotionEffect.POISON);data.effects.advance(.4f);
         SaveData poisoned=SaveData.decode(data.encode());
         require(poisoned.hp==4.5f&&poisoned.effects.ticksRemaining==4&&poisoned.effects.damageEffect==PotionEffect.POISON,"Half hearts and afflictions round-trip");
@@ -46,6 +47,9 @@ public final class SaveDataTest {
         data.mode=br.edu.motionbound.input.GameMode.REHABILITATION;invalid(data);
         data.simulatedSensors=true;
         require(SaveData.decode(data.encode()).simulatedSensors,"Synthetic sensor data must be explicitly identified");
+        data.physicalController=true;invalid(data);data.simulatedSensors=false;
+        require(SaveData.decode(data.encode()).physicalController&&!SaveData.decode(data.encode()).simulatedSensors,"Physical USB saves remain distinct from synthetic metrics");
+        data.physicalController=false;data.simulatedSensors=true;
         data.mode=br.edu.motionbound.input.GameMode.CONVENTIONAL;data.simulatedSensors=false;
 
         Path directory = Files.createTempDirectory(Path.of(args[0]), "save-test-");
@@ -60,6 +64,24 @@ public final class SaveDataTest {
         require(SaveData.read(file).hp == 3, "Last good checkpoint preserved");
         Files.delete(file.file().toPath()); Files.delete(directory);
         System.out.println("PASS: save round-trip, combat state, invalid data and safe replacement");
+    }
+    private static void guidedCheckpoint() {
+        SaveData data=checkpoint();data.mode=br.edu.motionbound.input.GameMode.REHABILITATION;
+        data.simulatedSensors=true;data.swingTime=-1;data.swingImpacted=false;
+        data.guidedStrike.begin(70,0,new com.badlogic.gdx.math.Vector2(1,0));data.guidedTargetIndex=0;
+        SaveData loaded=SaveData.decode(data.encode());
+        require(loaded.guidedStrike.phase==GuidedStrike.APPROACH&&loaded.guidedStrike.remaining==52
+                &&loaded.guidedTargetIndex==0,"Mid-dash checkpoint keeps distance and target");
+        data.guidedStrike.begin(20,0,new com.badlogic.gdx.math.Vector2(1,0));data.swingTime=.10f;
+        loaded=SaveData.decode(data.encode());
+        require(loaded.guidedStrike.retreatAfter&&!loaded.swingImpacted,"Pending close strike survives saving");
+        data.guidedStrike.impact();data.swingTime=.18f;data.swingImpacted=true;
+        loaded=SaveData.decode(data.encode());
+        require(loaded.guidedStrike.phase==GuidedStrike.RETREAT&&loaded.swingImpacted,"Retreat does not repeat damage on load");
+        data.guidedTargetIndex=3;invalid(data);data.guidedTargetIndex=0;
+        data.guidedStrike.remaining=1000;invalid(data);data.guidedStrike.remaining=18;
+        data.teleportPending=true;invalid(data);data.teleportPending=false;
+        data.mode=br.edu.motionbound.input.GameMode.CONVENTIONAL;data.simulatedSensors=false;invalid(data);
     }
     private static void fortressMigration() {
         SaveData old=new SaveData();old.version=4;old.stage=5;old.hp=5;old.heals=2;old.mana=43;old.defeated=21;
