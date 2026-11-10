@@ -10,6 +10,7 @@ import com.badlogic.gdx.math.Vector2;
 
 public final class CombatRulesTest {
     public static void main(String[] args) {
+        GuidedStrikeTest.verify();
         for(int angle=0;angle<360;angle+=45) {
             Vector2 aim=new Vector2(1,0).rotateDeg(angle);
             require(CombatRules.inArc(aim.x*20,aim.y*20,aim),"Hit in direction "+angle);

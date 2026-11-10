@@ -2,6 +2,9 @@ package br.edu.motionbound;
 
 import br.edu.motionbound.game.SaveData;
 import br.edu.motionbound.game.MeleeSwing;
+import br.edu.motionbound.game.GuidedStrike;
+import br.edu.motionbound.input.ControlSource;
+import br.edu.motionbound.input.PlayerCommand;
 import br.edu.motionbound.game.CampaignLevel;
 import br.edu.motionbound.game.DungeonMap;
 import br.edu.motionbound.game.EnemyKind;
@@ -10,9 +13,12 @@ import br.edu.motionbound.game.StatusEffects;
 import br.edu.motionbound.game.CasterAttack;
 import br.edu.motionbound.game.CameraDistortion;
 import br.edu.motionbound.input.GameMode;
+import br.edu.motionbound.input.EdgeController;
+import br.edu.motionbound.input.EdgeFrame;
 import br.edu.motionbound.ui.GameUi.Screen;
 import br.edu.motionbound.ui.GameUi;
 import br.edu.motionbound.ui.ScreenStatusEffects;
+import br.edu.motionbound.ui.HudFeedback;
 import com.badlogic.gdx.Application;
 import com.badlogic.gdx.ApplicationAdapter;
 import com.badlogic.gdx.Gdx;
@@ -56,12 +62,16 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
     private float pausedTime;
     private SaveData saved;
     private Throwable failure;
+    private long usbSequence,usbAttacks,usbMagic;
 
     private DesktopSmokeTest(Path path) { output = new FileHandle(path.toFile()); }
     public static void main(String[] args) throws Exception {
+        System.setProperty("motionbound.usb.disabled","true");
         Files.createDirectories(Path.of(args[0]));
         DesktopSmokeTest test = new DesktopSmokeTest(Path.of(args[0]));
-        new Lwjgl3Application(test, DesktopLauncher.configuration());
+        var configuration=DesktopLauncher.configuration();
+        configuration.setPreferencesConfig(Path.of(args[0],"preferences").toString(),com.badlogic.gdx.Files.FileType.Absolute);
+        new Lwjgl3Application(test, configuration);
         if (test.failure != null) throw new AssertionError("Desktop verification failed", test.failure);
         System.out.println("PASS: fullscreen, HUD, combat, knockback, five-stage campaign, countdown, retry, both control modes and save/continue");
     }
@@ -70,7 +80,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         application = Gdx.app; input = Gdx.input;
         game.create();
         set(game, "saveFile", output.child("test-expedition.json"));
-        set(game, "hasSave", false); set(game, "message", "");
+        set(game, "hasSave", false);set(game,"savedMode",GameMode.CONVENTIONAL);set(game, "message", "");
         simulatedInput = (Input)Proxy.newProxyInstance(Input.class.getClassLoader(), new Class<?>[]{Input.class}, (proxy, method, args) -> {
             return switch (method.getName()) {
                 case "isKeyJustPressed" -> (int)args[0] == key;
@@ -183,7 +193,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
                     verifyTeleportCinematic();
                     verifyCampaignFlow();
                     verifyingGuides=true;
-                    try {verifyScreenStatusEffectsFlow();verifyGuideMenus();}finally {verifyingGuides=false;}
+                    try {verifyScreenStatusEffectsFlow();verifyGuideMenus();verifyPresentationFlow();verifyAutomaticHealing();verifyPhysicalController();verifyGuidedCombat();}finally {verifyingGuides=false;}
                 }
                 default -> { }
             }
@@ -425,6 +435,303 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         click=true;game.render();click=false;game.render();
     }
     private void guideKey(int next) {key=next;game.render();key=-1;game.render();}
+    private void verifyPresentationFlow() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-presentation.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        GameUi ui=(GameUi)get(game,"ui");
+        var preferences=(com.badlogic.gdx.Preferences)get(ui,"visualPreferences");
+        boolean hadPreference=preferences.contains("reducedEffects"),previousPreference=preferences.getBoolean("reducedEffects",false);
+        try {
+            key=-1;click=false;held.clear();preferences.remove("reducedEffects");preferences.flush();
+            ui.modeChanged(GameMode.REHABILITATION);require(ui.reducedEffects(),"Rehabilitation defaults to reduced visual effects");
+            ui.modeChanged(GameMode.CONVENTIONAL);require(!ui.reducedEffects(),"Conventional mode keeps full effects before a manual preference");
+            set(game,"stage",1);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+            quietEnemies((Array<?>)get(game,"enemies"));Object player=get(game,"player");
+            set(player,"x",192f);set(player,"y",136f);set(player,"hp",4f);game.render();
+            HudFeedback feedback=(HudFeedback)get(ui,"feedback");
+            addHeart(192,136);call(game,"collectHearts");
+            require((float)get(player,"hp")==5&&feedback.flights.size==1,"Pickup heals immediately and starts exactly one visual flight");
+            call(game,"collectHearts");require(feedback.flights.size==1,"Consumed hearts cannot queue a second flight");
+            game.render();game.pause();float flightAge=feedback.flights.first().age;
+            for(int i=0;i<4;i++)game.render();
+            require(feedback.flights.first().age==flightAge,"Pause freezes the collected heart in flight");
+            set(game,"scene",Screen.PLAYING);
+            Gdx.graphics.setWindowedMode(1280,800);Gdx.input=simulatedInput;Gdx.app=simulatedApplication;game.resize(1280,800);
+            FileHandle frames=output.child("collection-motion");frames.mkdirs();
+            for(int n=0;n<48;n++) {
+                feedback.update((GameUi.View)get(game,"uiView"),Math.max(0,1f/30-Math.min(Gdx.graphics.getDeltaTime(),1f/30)));
+                game.render();
+                if(n==8)screenshot("61-heart-flight");if(n==23)screenshot("62-heart-hud-arrival");
+                writeAnimationFrame(frames,n);
+            }
+            require(feedback.flights.isEmpty()&&(float)get(player,"hp")==5&&(int)get(game,"heartsCollected")==1,
+                    "Flight completes at the HUD without applying healing or incrementing collection again");
+            set(player,"mana",100f);set(player,"magicCd",0f);game.render();
+            set(player,"mana",75f);set(player,"magicCd",.1f);game.render();
+            require(feedback.manaPulse>0&&feedback.lagMana>75,"Spending mana leaves a fading crystal trail");
+            set(player,"magicCd",0f);game.render();require(feedback.readyPulse>0,"Magic cooldown completion triggers a brief ready accent");
+            set(player,"hp",4f);game.render();require(feedback.hurtPulse>0,"Damage animates the HUD without modifying life");
+            game.pause();clickPause(148,232);require(get(ui,"page").toString().equals("SETTINGS"),"Visual comfort is available in Settings");
+            clickPause(660,115);require(ui.reducedEffects()&&preferences.getBoolean("reducedEffects"),"The accessible toggle persists the user's preference");
+            ui.modeChanged(GameMode.CONVENTIONAL);require(ui.reducedEffects(),"An explicit preference survives changing control modes");
+            GameUi reopened=new GameUi((br.edu.motionbound.game.GameAssets)get(game,"art"));
+            try{require(reopened.reducedEffects(),"Recreating the interface restores the visual preference");}finally{reopened.dispose();}
+            screenshot("63-reduced-effects-settings");
+            set(game,"scene",Screen.PLAYING);set(game,"screenShake",3f);set(game,"hitStop",.045f);
+            float elapsed=(float)get(game,"elapsed");game.render();
+            require((float)get(game,"screenShake")==0&&(float)get(game,"elapsed")>elapsed,"Reduced effects remove shaking and impact freeze without suspending gameplay");
+            set(ui,"reducedEffects",false);
+            Array<?> enemies=(Array<?>)get(game,"enemies");
+            for(int n=0;n<enemies.size;n++){Object enemy=enemies.get(n);set(enemy,"type",n%7);set(enemy,"x",90f+n*24);set(enemy,"y",150f);set(enemy,"hp",0);}
+            call(game,"resolveDeaths");tick("updateTransient",.12f);game.render();screenshot("64-distinct-enemy-defeats");
+            require(((Array<?>)get(game,"deaths")).size==7,"Every enemy kind has a visible defeat animation");
+            set(game,"stage",2);call(game,"startStage");set(game,"irisOpen",.3f);game.render();screenshot("65-pixel-iris-opening");
+            require(feedback.flights.isEmpty(),"Stage changes clear visual pickups without carrying them into another map");
+            set(game,"irisOpen",0f);set(game,"scene",Screen.PLAYING);
+            player=get(game,"player");DungeonMap map=(DungeonMap)get(game,"dungeon");
+            set(player,"x",map.exitX());set(player,"y",map.exitY());
+            enemies=(Array<?>)get(game,"enemies");for(Object enemy:enemies)set(enemy,"hp",0);call(game,"resolveDeaths");tick("updateCamera",1f);step(.02f);
+            require(scene()==Screen.LEVEL_COMPLETE&&(float)get(game,"irisClose")>0,"Reaching an unlocked exit starts the closing pixel iris");
+            set(game,"irisClose",.25f);game.render();screenshot("66-pixel-iris-closing");
+            key=Input.Keys.ENTER;game.render();key=-1;
+            require(scene()==Screen.LEVEL_COMPLETE,"Confirming during the closing iris cannot activate the hidden HUD pause button");
+            game.pause();float close=(float)get(game,"irisClose");game.render();require((float)get(game,"irisClose")==close,"Pausing also freezes the stage transition");
+            set(game,"scene",Screen.LEVEL_COMPLETE);set(game,"irisClose",0f);game.render();set(ui,"screenAge",1f);game.render();screenshot("67-expedition-results");
+            FileHandle transitionFrames=output.child("transition-motion");transitionFrames.mkdirs();
+            for(int n=0;n<48;n++) {
+                if(n<18)set(game,"irisClose",.5f*(1-n/18f));
+                else {
+                    if(n==18)call(game,"nextStage");
+                    set(game,"irisOpen",Math.max(0,.6f*(1-(n-18)/20f)));
+                }
+                game.render();writeAnimationFrame(transitionFrames,n);
+            }
+        } finally {
+            key=-1;click=false;held.clear();
+            if(hadPreference)preferences.putBoolean("reducedEffects",previousPreference);else preferences.remove("reducedEffects");
+            preferences.flush();set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+            Gdx.graphics.setWindowedMode(1280,720);Gdx.input=simulatedInput;Gdx.app=simulatedApplication;game.resize(1280,720);
+        }
+    }
+    private void verifyAutomaticHealing() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-auto-heal.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        GameUi ui=(GameUi)get(game,"ui");boolean reduced=ui.reducedEffects();
+        try {
+            key=-1;click=false;held.clear();
+            set(game,"mode",GameMode.REHABILITATION);set(game,"stage",1);call(game,"resetWorld");
+            set(game,"scene",Screen.PLAYING);quietEnemies((Array<?>)get(game,"enemies"));
+            Object player=get(game,"player");StatusEffects effects=(StatusEffects)get(player,"effects");
+            HudFeedback feedback=(HudFeedback)get(ui,"feedback");
+            Method damage=game.getClass().getDeclaredMethod("hurtPlayer",float.class,boolean.class);damage.setAccessible(true);
+            set(player,"hp",2f);step(.02f);
+            require((int)get(player,"heals")==3,"Rehabilitation does not consume a charge above one heart");
+            effects.apply(PotionEffect.POISON);set(player,"hp",1.5f);effects.untilTick=.01f;step(.02f);
+            require((float)get(player,"hp")==3&&(int)get(player,"heals")==2&&(int)get(game,"healsUsed")==1,
+                    "A poison tick reaching one heart automatically restores two hearts and consumes one charge");
+            require(effects.damageEffect==null&&effects.ticksRemaining==0,"Automatic healing cleanses damaging status effects");
+            require(feedback.autoHealCharges==2&&feedback.autoHealRemaining>0,"Automatic healing queues the remaining-charge notice");
+            set(ui,"reducedEffects",false);game.render();screenshot("68-automatic-heal-notice");
+            game.pause();float frozen=feedback.autoHealRemaining;game.render();game.render();
+            require(feedback.autoHealRemaining==frozen,"Pause freezes the automatic-heal notice");
+            set(game,"scene",Screen.PLAYING);set(player,"hp",1f);step(.02f);
+            require((float)get(player,"hp")==1&&(int)get(player,"heals")==2,"Healing cooldown prevents duplicate consumption");
+            set(player,"healCd",.01f);step(.02f);
+            require((float)get(player,"hp")==3&&(int)get(player,"heals")==1,"Low health heals when the cooldown expires");
+            FileHandle checkpoint=output.child("automatic-heal-checkpoint.json");
+            ((SaveData)call(game,"captureSave")).write(checkpoint);set(game,"saveFile",checkpoint);call(game,"loadGame");
+            player=get(game,"player");feedback=(HudFeedback)get(ui,"feedback");
+            require((int)get(player,"heals")==1&&(int)get(game,"healsUsed")==2&&feedback.autoHealRemaining==0,
+                    "Loading preserves charges and statistics without replaying an old healing notice");
+            set(game,"scene",Screen.PLAYING);quietEnemies((Array<?>)get(game,"enemies"));
+            set(player,"hp",1.5f);set(player,"healCd",0f);set(player,"hitInvuln",0f);
+            damage.invoke(game,1f,false);
+            require((float)get(player,"hp")==2.5f&&(int)get(player,"heals")==0,"Damage crossing below one heart consumes the final charge");
+            game.render();screenshot("69-automatic-heal-last-charge");
+            set(player,"hp",1f);set(player,"healCd",0f);step(.02f);
+            require((float)get(player,"hp")==1&&(int)get(player,"heals")==0,"An empty supply never grants free healing");
+            set(player,"hp",.5f);set(player,"heals",1);set(player,"hitInvuln",0f);damage.invoke(game,.5f,false);
+            require((float)get(player,"hp")==0&&(int)get(player,"heals")==1,"Automatic healing cannot revive lethal damage");
+            set(game,"mode",GameMode.CONVENTIONAL);set(player,"hp",1.5f);set(player,"healCd",0f);
+            damage.invoke(game,.5f,true);step(.02f);
+            require((float)get(player,"hp")==1&&(int)get(player,"heals")==1,"Conventional mode keeps manual healing");
+            set(game,"mode",GameMode.REHABILITATION);set(player,"hp",1f);set(player,"heals",1);
+            ((SaveData)call(game,"captureSave")).write(checkpoint);set(game,"saveFile",checkpoint);call(game,"loadGame");
+            player=get(game,"player");set(game,"scene",Screen.PAUSED);game.render();
+            require((float)get(player,"hp")==1&&(int)get(player,"heals")==1,"A paused low-health checkpoint cannot spend a charge");
+            set(game,"scene",Screen.PLAYING);step(.02f);
+            require((float)get(player,"hp")==3&&(int)get(player,"heals")==0,"A low-health checkpoint heals once after resuming");
+            call(game,"startStage");
+            require((int)get(get(game,"player"),"heals")==3&&feedback.autoHealRemaining==0,"A new stage restores three charges and clears the notice");
+        } finally {
+            key=-1;click=false;held.clear();set(ui,"reducedEffects",reduced);
+            set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void physicalPacket(int buttons,float x,float y) {
+        ((EdgeController)get(game,"edge")).offer(new EdgeFrame(99,usbSequence++,x,y,1,buttons,usbAttacks,usbMagic,7),System.nanoTime());
+    }
+    private void physicalButton(int buttons) {
+        // PNG capture and map setup block this synthetic sender; a real USB worker
+        // keeps receiving packets meanwhile. Model that continuing heartbeat here.
+        set(get(game,"edge"),"lastTime",System.nanoTime());
+        physicalPacket(0,.02f,-.03f);game.render();physicalPacket(buttons,.02f,-.03f);game.render();physicalPacket(0,.02f,-.03f);game.render();
+    }
+    private void verifyPhysicalController() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-physical-controller.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        EdgeController previousEdge=(EdgeController)get(game,"edge"),controller=new EdgeController(null);
+        boolean hadSave=(boolean)get(game,"hasSave");GameUi ui=(GameUi)get(game,"ui");
+        try {
+            key=-1;click=false;held.clear();set(game,"edge",controller);set(game,"hasSave",false);
+            set(game,"physicalControls",false);set(game,"scene",Screen.MODE_SELECT);set(ui,"previous",null);
+            physicalPacket(0,.02f,-.03f);game.render();physicalButton(8);physicalButton(4);
+            require(scene()==Screen.REHAB_SETUP,"Keypad alone selects rehabilitation from the opening menu");
+            screenshot("70-usb-controller-setup");physicalButton(4);
+            require(controller.calibrating(),"Confirm starts neutral calibration without a keyboard");
+            set(controller,"calibrationStarted",System.nanoTime()-3_000_000_000L);
+            for(int batch=0;batch<4;batch++){for(int n=0;n<20;n++)physicalPacket(0,.02f,-.03f);game.render();}
+            require(controller.ready(),"Stable USB samples finish the calibration");screenshot("71-usb-controller-calibrated");
+            physicalButton(4);require((scene()==Screen.LEVEL_INTRO||scene()==Screen.PLAYING)&&(boolean)get(game,"physicalControls"),"Keypad starts a real-controller expedition: "+scene()+", ready="+controller.ready()+", physical="+get(game,"physicalControls"));
+            if(scene()==Screen.LEVEL_INTRO)advanceIntro(CampaignLevel.INTRO_SECONDS);
+            quietEnemies((Array<?>)get(game,"enemies"));
+            Object player=get(game,"player");verifyPhysicalSprint(controller,player);
+            float x=(float)get(player,"x"),y=(float)get(player,"y");
+            physicalPacket(0,.37f,.32f);game.render();step(.15f);
+            require((float)get(player,"x")>x&&(float)get(player,"y")>y,"Physical tilt moves diagonally");
+            int attacks=(int)get(game,"attacks");usbAttacks++;physicalPacket(0,.02f,-.03f);game.render();
+            require((int)get(game,"attacks")==attacks+1,"A USB swipe produces a sword attack");
+            step(.5f);int casts=(int)get(game,"magicCasts");usbMagic++;physicalPacket(0,.02f,-.03f);game.render();
+            require((int)get(game,"magicCasts")==casts+1,"An upward USB swipe produces magic");
+            screenshot("72-usb-controller-hud");
+            physicalButton(1);require(scene()==Screen.PAUSED,"Keypad pauses the game");
+            physicalButton(8);physicalButton(8);physicalButton(8);physicalButton(4);
+            require(get(ui,"page").toString().equals("TUTORIAL"),"Keypad enters Tutorial");
+            physicalButton(8);physicalButton(8);physicalButton(8);physicalButton(4);
+            require(get(ui,"tutorialMode")==GameMode.CONVENTIONAL,"Keypad navigates and confirms a tutorial tab");
+            screenshot("73-usb-keypad-tutorial");physicalButton(1);physicalButton(1);
+            require(scene()==Screen.PLAYING,"Keypad returns from a subpage and resumes");
+            physicalButton(1);physicalButton(8);physicalButton(8);physicalButton(4);
+            for(int i=0;i<4;i++)physicalButton(8);physicalButton(4);
+            require(scene()==Screen.CONTROLLER,"Keypad opens controller settings from pause");
+            screenshot("74-usb-controller-settings");int sensitivity=controller.sensitivity;
+            physicalButton(8);physicalButton(4);require(controller.sensitivity!=sensitivity,"Keypad adjusts sensitivity");
+            physicalButton(1);physicalButton(1);require(scene()==Screen.PLAYING,"Keypad returns from controller settings");
+            float elapsed=(float)get(game,"elapsed");set(controller,"lastTime",System.nanoTime()-EdgeController.STALE_NS-1);
+            game.render();require(scene()==Screen.PAUSED&&(float)get(game,"elapsed")==elapsed,"Lost USB stream pauses before advancing gameplay");
+            SaveData data=(SaveData)call(game,"captureSave");FileHandle checkpoint=output.child("physical-controller-checkpoint.json");data.write(checkpoint);
+            require(data.physicalController&&!data.simulatedSensors,"Physical gameplay saves are labelled without fabricated pressure metrics");
+            set(game,"saveFile",checkpoint);call(game,"loadGame");
+            require(scene()==Screen.REHAB_SETUP,"Physical checkpoints require a ready controller before resuming");
+        } finally {
+            key=-1;click=false;held.clear();controller.close();set(game,"edge",previousEdge);set(game,"saveFile",backup);
+            call(game,"loadGame");set(game,"saveFile",previous);set(game,"hasSave",hadSave);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void verifyGuidedCombat() throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-guided-combat.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        try {
+            held.clear();key=-1;click=false;set(game,"stage",1);set(game,"mode",GameMode.REHABILITATION);
+            set(game,"physicalControls",false);call(game,"resetWorld");set(game,"scene",Screen.PLAYING);
+            PlayerCommand command=new PlayerCommand();command.assistedAim=true;command.aim.set(-1,0);
+            ControlSource input=delta->command;set(game,"controls",input);
+            Object player=get(game,"player");set(player,"x",192f);set(player,"y",136f);
+            Array<?> enemies=(Array<?>)get(game,"enemies");
+            for(Object enemy:enemies){set(enemy,"x",600f);set(enemy,"y",400f);set(enemy,"speed",0f);set(enemy,"attackCd",6f);}
+            Object target=enemies.get(0),neighbor=enemies.get(1),farther=enemies.get(2);
+            set(target,"x",262f);set(target,"y",136f);
+            set(neighbor,"x",267f);set(neighbor,"y",145f);
+            set(farther,"x",290f);set(farther,"y",136f);
+            step(.01f);require(get(game,"guidedTarget")==target,"Nearest visible enemy is marked even behind movement direction");
+            game.render();screenshot("77-guided-target");
+            command.attack=true;step(.02f);command.attack=false;
+            GuidedStrike guided=(GuidedStrike)get(game,"guidedStrike");
+            require(guided.phase==GuidedStrike.APPROACH&&(int)get(target,"hp")==2,"Gesture starts dash without remote damage");
+            step(.06f);float pausedX=(float)get(player,"x"),remaining=guided.remaining;
+            game.pause();game.render();
+            require((float)get(player,"x")==pausedX&&guided.remaining==remaining,"Pause freezes the dash");
+            FileHandle middle=output.child("guided-approach.json");((SaveData)call(game,"captureSave")).write(middle);
+            set(game,"saveFile",middle);call(game,"loadGame");set(game,"controls",input);set(game,"scene",Screen.PLAYING);
+            player=get(game,"player");enemies=(Array<?>)get(game,"enemies");target=enemies.get(0);neighbor=enemies.get(1);farther=enemies.get(2);
+            for(Object enemy:enemies)set(enemy,"speed",0f);
+            require(get(game,"guidedTarget")==target&&Math.abs(guided.remaining-remaining)<.001f,"Load resumes locked target and remaining travel");
+            for(int n=0;n<30;n++)step(.02f);
+            require((int)get(target,"hp")==1&&(int)get(neighbor,"hp")==1&&(int)get(farther,"hp")==3,
+                    "One sword impact damages the group, never a distant enemy");
+            require((int)get(game,"attacks")==1&&(int)get(game,"hits")==1,"Loading mid-dash cannot duplicate the gesture or hit");
+            require(Math.abs((float)get(player,"x")-244)<.1f,"Forward dash stops before the enemy");
+            game.render();screenshot("78-guided-impact");
+
+            // Prepare a fresh close encounter: no forward travel, then retreat after damage.
+            call(game,"resetWorld");set(game,"controls",input);set(game,"scene",Screen.PLAYING);
+            player=get(game,"player");set(player,"x",192f);set(player,"y",136f);
+            enemies=(Array<?>)get(game,"enemies");
+            for(Object enemy:enemies){set(enemy,"x",600f);set(enemy,"y",400f);set(enemy,"speed",0f);set(enemy,"attackCd",6f);}
+            target=enemies.first();set(target,"x",214f);set(target,"y",136f);
+            step(.01f);game.render();screenshot("79-guided-close-target");
+            command.attack=true;step(.02f);command.attack=false;
+            require((float)get(player,"x")==192&&guided.phase==GuidedStrike.STRIKE,"Close enemy skips forward dash");
+            for(int n=0;n<12&&guided.phase==GuidedStrike.STRIKE;n++)step(.02f);
+            require((int)get(target,"hp")==1&&guided.phase==GuidedStrike.RETREAT&&(float)get(player,"x")==192,
+                    "Sword damage occurs before the backward dash");
+            for(int n=0;n<6;n++)step(.02f);
+            require(Math.abs((float)get(player,"x")-174)<.1f&&!guided.active(),"Close hit retreats 18 units");
+
+            // Occlusion, range, fallback and conventional combat.
+            set(target,"x",274f);set(target,"y",136f);step(.01f);
+            require(get(game,"guidedTarget")==null,"Beyond triple reach there is no marker");
+            set(player,"x",280f);set(player,"y",200f);set(target,"x",360f);set(target,"y",200f);step(.01f);
+            require(get(game,"guidedTarget")==null,"Wall hides a target even inside assisted range");
+            set(player,"attackCd",0f);((MeleeSwing)get(game,"swing")).elapsed=-1;
+            command.attack=true;step(.01f);command.attack=false;
+            require(!guided.active(),"No target gives a normal sword attack without dash");
+            set(game,"mode",GameMode.CONVENTIONAL);set(player,"attackCd",0f);((MeleeSwing)get(game,"swing")).elapsed=-1;
+            set(player,"x",192f);set(player,"y",136f);set(target,"x",262f);set(target,"y",136f);
+            command.attack=true;step(.01f);command.attack=false;
+            require(!guided.active()&&(float)get(player,"x")==192,"Conventional combat never gains guided dash");
+        } finally {
+            set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void verifyPhysicalSprint(EdgeController controller,Object player) {
+        float startX=(float)get(player,"x"),startY=(float)get(player,"y");controller.reset();
+        for(int i=0;i<150;i++) {
+            set(player,"x",192f);set(player,"y",136f);
+            physicalPacket(0,.37f,-.03f);controller.update(System.nanoTime());step(.02f);
+        }
+        require(!(boolean)get(player,"running")&&controller.sprintProgress()>.74f&&controller.sprintProgress()<.76f,
+                "Sustained strong tilt is still walking after three seconds");
+        physicalPacket(0,.37f,-.03f);game.render();screenshot("75-tilt-sprint-countdown");
+        set(controller,"lastTime",System.nanoTime());
+        for(int i=0;i<60&&!((boolean)get(player,"running"));i++) {
+            set(player,"x",192f);physicalPacket(0,.37f,-.03f);controller.update(System.nanoTime());step(.02f);
+        }
+        require((boolean)get(player,"running"),"Sustained tilt starts the actual running animation and movement state");
+        set(player,"x",192f);float vigor=(float)get(player,"stamina");step(.1f);
+        require((float)get(player,"x")>200&&(float)get(player,"stamina")<vigor,"Physical sprint increases speed and spends vigor");
+        physicalPacket(0,.37f,-.03f);game.render();screenshot("76-tilt-sprint-active");
+        set(controller,"lastTime",System.nanoTime());
+        physicalPacket(0,-.33f,-.03f);controller.update(System.nanoTime());step(.02f);
+        require(!(boolean)get(player,"running")&&controller.sprintProgress()<.01f,"Reversing tilt immediately cancels sprint despite movement smoothing");
+        for(int i=0;i<201;i++) {
+            set(player,"x",192f);physicalPacket(0,.37f,-.03f);controller.update(System.nanoTime());step(.02f);
+        }
+        require((boolean)get(player,"running"),"A new direction needs and completes its own charge");
+        set(player,"stamina",.5f);step(.02f);
+        require(!(boolean)get(player,"running")&&controller.sprintNeedsRelease(),"Exhaustion cancels running and requests a relaxed hand");
+        for(int i=0;i<60;i++) {
+            set(player,"x",192f);physicalPacket(0,.37f,-.03f);controller.update(System.nanoTime());step(.02f);
+            require(!(boolean)get(player,"running")&&controller.sprintProgress()==0,"Held tilt cannot pulse the exhausted sprint");
+        }
+        physicalPacket(0,.02f,-.03f);controller.update(System.nanoTime());step(.02f);
+        require(!controller.sprintNeedsRelease(),"Relaxing the hand re-arms running");
+        controller.reset();set(player,"x",startX);set(player,"y",startY);set(player,"stamina",100f);
+    }
+    private void writeAnimationFrame(FileHandle frames,int index) {
+        Pixmap image=ScreenUtils.getFrameBufferPixmap(0,0,Gdx.graphics.getBackBufferWidth(),Gdx.graphics.getBackBufferHeight());
+        PixmapIO.writePNG(frames.child(String.format(java.util.Locale.ROOT,"fire-%03d.png",index)),image,-1,true);image.dispose();
+    }
     private void verifyGuideMenus() {
         GameUi ui=(GameUi)get(game,"ui");set(game,"scene",Screen.PAUSED);key=-1;click=false;game.render();
         SaveData before=(SaveData)call(game,"captureSave");

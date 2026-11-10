@@ -1,10 +1,10 @@
-package br.edu.motionbound.game;
+ package br.edu.motionbound.game;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.files.FileHandle;
-import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.Pixmap;
+import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Disposable;
 
@@ -16,6 +16,12 @@ public final class GameAssets implements Disposable {
     public final Texture skeletonTexture;
     public final Texture glow;
     public final Texture actionsTexture, heartTexture;
+    private final Texture enemyFlashesTexture;
+    private final Texture bannerTexture;
+    public final TextureRegion[] banners=new TextureRegion[4];
+    public final TextureRegion detailPixel;
+    private final TextureRegion[] enemyFlashes=new TextureRegion[EnemyKind.values().length];
+    public final TextureRegion[][] enemyFragments=new TextureRegion[EnemyKind.values().length][8];
     public final TextureRegion[][] actions;
     public final TextureRegion heroPortrait;
     public final TextureRegion batLeft,batBody,batRight;
@@ -107,6 +113,40 @@ public final class GameAssets implements Disposable {
         }
         glow=new Texture(light);light.dispose();
         glow.setFilter(Texture.TextureFilter.Nearest,Texture.TextureFilter.Nearest);
+        Pixmap silhouettes=new Pixmap(EnemyKind.values().length*16,16,Pixmap.Format.RGBA8888);
+        Pixmap atlasPixels=new Pixmap(usingKenney?atlas:Gdx.files.internal("fallback/tiles.png"));
+        Pixmap slimePixels=new Pixmap(Gdx.files.internal("characters/slime.png"));
+        Pixmap skeletonPixels=new Pixmap(Gdx.files.internal("characters/skeleton.png"));
+        for(EnemyKind kind:EnemyKind.values()) {
+            int id=kind.ordinal();TextureRegion region=enemy(id,0);
+            Pixmap source=kind==EnemyKind.SLIME?slimePixels:kind==EnemyKind.SKELETON?skeletonPixels:atlasPixels;
+            for(int y=0;y<16;y++)for(int x=0;x<16;x++) {
+                float alpha=(source.getPixel(region.getRegionX()+x,region.getRegionY()+y)&255)/255f;
+                silhouettes.setColor(1,1,1,alpha);silhouettes.drawPixel(id*16+x,y);
+            }
+            for(int n=0;n<8;n++)enemyFragments[id][n]=new TextureRegion(region,n%4*4,n/4*8,4,8);
+        }
+        atlasPixels.dispose();slimePixels.dispose();skeletonPixels.dispose();
+        enemyFlashesTexture=new Texture(silhouettes);silhouettes.dispose();
+        enemyFlashesTexture.setFilter(Texture.TextureFilter.Nearest,Texture.TextureFilter.Nearest);
+        for(int id=0;id<enemyFlashes.length;id++)enemyFlashes[id]=new TextureRegion(enemyFlashesTexture,id*16,0,16,16);
+        Pixmap flags=new Pixmap(32,16,Pixmap.Format.RGBA8888);
+        for(int frame=0;frame<4;frame++) {
+            int offset=frame*8;
+            flags.setColor(Color.valueOf("48313e"));flags.fillRectangle(offset,1,2,15);
+            flags.setColor(Color.valueOf("ba8854"));flags.fillRectangle(offset+1,1,1,14);
+            flags.setColor(Color.valueOf("f5dfaf"));flags.drawPixel(offset+1,0);
+            for(int x=2;x<8;x++)for(int y=0;y<5;y++) {
+                int wave=(x+frame)%4==0?1:0;
+                if(x==7&&y==2)continue;
+                flags.setColor(Color.valueOf(y==0||y==4?"d7a05b":(x+frame)%3==0?"c65b6a":"873749"));
+                flags.drawPixel(offset+x,2+y+wave);
+            }
+        }
+        flags.setColor(Color.WHITE);flags.drawPixel(31,15);
+        bannerTexture=new Texture(flags);flags.dispose();bannerTexture.setFilter(Texture.TextureFilter.Nearest,Texture.TextureFilter.Nearest);
+        for(int n=0;n<4;n++)banners[n]=new TextureRegion(bannerTexture,n*8,0,8,15);
+        detailPixel=new TextureRegion(bannerTexture,31,15,1,1);
     }
     private Texture texture(String path) {
         Texture t=new Texture(Gdx.files.internal(path));
@@ -133,6 +173,7 @@ public final class GameAssets implements Disposable {
             case GHOST -> tile(108);case BAT -> tile(120);
         };
     }
+    public TextureRegion enemyFlash(int type){return enemyFlashes[type];}
     public TextureRegion countdownDigit(int digit) {
         if(digit<1||digit>3)throw new IllegalArgumentException("Countdown digit must be 1, 2 or 3");
         return prop(DungeonMap.SKI+84+digit);
@@ -142,5 +183,7 @@ public final class GameAssets implements Disposable {
         townTexture.dispose();detailsTexture.dispose();glow.dispose();
         farmTexture.dispose();skiTexture.dispose();
         actionsTexture.dispose();heartTexture.dispose();
+        enemyFlashesTexture.dispose();
+        bannerTexture.dispose();
     }
 }

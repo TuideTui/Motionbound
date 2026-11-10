@@ -9,7 +9,7 @@ import com.badlogic.gdx.utils.Disposable;
 
 /** Original hand-authored pixel symbols. Silhouette and fill both identify each resource. */
 final class UiIcons implements Disposable {
-    enum Icon { HEART, BOLT, CRYSTAL, SCROLL, SKULL, CLOCK, COG, DOOR, PAUSE, LOCK }
+    enum Icon { HEART, BOLT, CRYSTAL, SCROLL, SKULL, CLOCK, COG, DOOR, PAUSE, LOCK, DOWN_ARROW, CROSSHAIR }
     private final Texture atlas;
     private static final int CELL = 16;
 
@@ -25,7 +25,9 @@ final class UiIcons implements Disposable {
             {"    ss    ", " ssSssSss ", "  sSSSSs  ", " sSSssSSs ", "ssSs  sSss", "ssSs  sSss", " sSSssSSs ", "  sSSSSs  ", " ssSssSss ", "    ss    "},
             {"  yyyyyyyyy ", "  yWWWWWWWy ", "  yWddddWWy ", "  yWddddWWy ", "  yWddddWWy ", "  yWddydWWy ", "  yWddddWWy ", "  yWddddWWy ", "  yWddddWWy ", " yyyyyyyyyyy"},
             {" WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW "},
-            {"   sssss   ", "  ss   ss  ", "  ss   ss  ", "  ss   ss  ", " yyyyyyyyy ", " yYYYYYYYy ", " yYYYdYYYy ", " yYYdddYYy ", " yYYYdYYYy ", " yyyyyyyyy "}
+            {"   sssss   ", "  ss   ss  ", "  ss   ss  ", "  ss   ss  ", " yyyyyyyyy ", " yYYYYYYYy ", " yYYYdYYYy ", " yYYdddYYy ", " yYYYdYYYy ", " yyyyyyyyy "},
+            {"   yy   ", "   YY   ", "   YY   ", "   YY   ", "yYYYYYYy", " yYYYYy ", "  yYYy  ", "   yy   "},
+            {"   yyyy   ", " yy    yy ", " y  YY  y ", "y   YY   y", "yYY WW YYy", "yYY WW YYy", "y   YY   y", " y  YY  y ", " yy    yy ", "   yyyy   "}
         };
         for (int i = 0; i < designs.length; i++) {
             String[] rows = designs[i];
@@ -67,6 +69,14 @@ final class UiIcons implements Disposable {
         batch.setColor(Color.WHITE);
         if (rows > 0) batch.draw(atlas, x, y, size, size * rows / CELL,
                 icon.ordinal() * CELL, CELL - rows, CELL, rows, false, false);
+    }
+    void spent(SpriteBatch batch,Icon icon,float x,float y,float size,float lower,float upper,float alpha) {
+        int bottom=Math.round(CELL*MathUtils.clamp(lower,0,1)),top=Math.round(CELL*MathUtils.clamp(upper,0,1));
+        if(top<=bottom)return;
+        batch.setColor(.5f,.85f,1,alpha);
+        batch.draw(atlas,x,y+size*bottom/CELL,size,size*(top-bottom)/CELL,
+                icon.ordinal()*CELL,CELL-top,CELL,top-bottom,false,false);
+        batch.setColor(Color.WHITE);
     }
     @Override public void dispose() { atlas.dispose(); }
 }
