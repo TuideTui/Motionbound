@@ -9,7 +9,7 @@ import com.badlogic.gdx.utils.Disposable;
 
 /** Original hand-authored pixel symbols. Silhouette and fill both identify each resource. */
 final class UiIcons implements Disposable {
-    enum Icon { HEART, BOLT, CRYSTAL, SCROLL, SKULL, CLOCK, COG, DOOR, PAUSE, LOCK, DOWN_ARROW, CROSSHAIR }
+    enum Icon { HEART, BOLT, CRYSTAL, SCROLL, SKULL, CLOCK, COG, DOOR, PAUSE, LOCK, DOWN_ARROW, CROSSHAIR, RIGHT_ARROW }
     private final Texture atlas;
     private static final int CELL = 16;
 
@@ -27,7 +27,8 @@ final class UiIcons implements Disposable {
             {" WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW ", " WWW  WWW "},
             {"   sssss   ", "  ss   ss  ", "  ss   ss  ", "  ss   ss  ", " yyyyyyyyy ", " yYYYYYYYy ", " yYYYdYYYy ", " yYYdddYYy ", " yYYYdYYYy ", " yyyyyyyyy "},
             {"   yy   ", "   YY   ", "   YY   ", "   YY   ", "yYYYYYYy", " yYYYYy ", "  yYYy  ", "   yy   "},
-            {"   yyyy   ", " yy    yy ", " y  YY  y ", "y   YY   y", "yYY WW YYy", "yYY WW YYy", "y   YY   y", " y  YY  y ", " yy    yy ", "   yyyy   "}
+            {"   yyyy   ", " yy    yy ", " y  YY  y ", "y   YY   y", "yYY WW YYy", "yYY WW YYy", "y   YY   y", " y  YY  y ", " yy    yy ", "   yyyy   "},
+            {"      y    ", "      Yy   ", "      YYy  ", "yyyyyyYYYy ", "yYYYYYYYYYy", "yyyyyyYYYy ", "      YYy  ", "      Yy   ", "      y    "}
         };
         for (int i = 0; i < designs.length; i++) {
             String[] rows = designs[i];
