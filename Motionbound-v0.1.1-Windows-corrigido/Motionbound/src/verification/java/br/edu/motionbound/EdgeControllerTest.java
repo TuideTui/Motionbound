@@ -11,6 +11,7 @@ public final class EdgeControllerTest {
     private static void require(boolean ok,String message){if(!ok)throw new AssertionError(message);}
     public static void main(String[] args) {
         TiltSprintTest.verify();
+        verifyMotorSamples();
         require(EdgeFrame.parse("MB1;1;2;0.1;-0.2;1;0;0;0;7")!=null,"Valid firmware packet");
         for(String bad:new String[]{"[OK] APDS","MB2;1;2;0;0;1;0;0;0;7","MB1;1;2;NaN;0;1;0;0;0;7",
                 "MB1;1;2;0;0;1;16;0;0;7","MB1;4294967296;2;0;0;1;0;0;0;7","MB1;1;2;0;0;1;0;0;0;7;extra"})
@@ -42,5 +43,25 @@ public final class EdgeControllerTest {
         c.accept(new EdgeFrame(2,0,0,0,1,4,0,0,7),time+20_000_000);
         require(!c.ready()&&c.pressed()==0,"Device reboot needs fresh calibration and release");
         c.close();System.out.println("PASS: USB framing, counters, calibration, movement, gestures, menu edges, stale data and reboot");
+    }
+    private static void verifyMotorSamples() {
+        EdgeController c=new EdgeController(null);accept(c,0,0,0,0,0);c.beginCalibration();
+        for(int i=0;i<105;i++)accept(c,0,0,0,0,0);
+        c.reset();
+        for(int i=0;i<201;i++){accept(c,.35f,0,0,0,0);c.read(.02f);}
+        require(c.consistency.score(1)==100,"Real consecutive accelerometer frames produce the score");
+        double measured=c.consistency.seconds[0];
+        for(int i=0;i<300;i++)c.read(.02f);
+        require(c.consistency.seconds[0]==measured,"Render frames cannot re-count the last sensor sample");
+        c.reset();c.consistency.beginStage(2);
+        for(int i=0;i<300;i++)accept(c,.35f,0,0,0,0);
+        c.update(time);c.read(.02f);
+        require(c.consistency.seconds[1]==0,"Packets received in menus cannot become measurements on resume");
+        EdgeFrame duplicate=frame(.35f,0,0,0,0);time+=20_000_000;c.accept(duplicate,time);c.read(.02f);
+        measured=c.consistency.seconds[1];c.accept(duplicate,time+20_000_000);c.read(.02f);
+        require(c.consistency.seconds[1]==measured,"Duplicate sequence numbers do not count");
+        c.update(time+EdgeController.STALE_NS+1);c.read(4);
+        require(c.consistency.seconds[1]==measured,"Disconnect excludes the entire missing interval");
+        c.close();
     }
 }

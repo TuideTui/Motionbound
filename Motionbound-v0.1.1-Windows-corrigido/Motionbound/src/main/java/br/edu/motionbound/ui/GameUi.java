@@ -44,6 +44,7 @@ public final class GameUi implements Disposable {
         public GameMode mode=GameMode.CONVENTIONAL,savedMode=GameMode.CONVENTIONAL;
         public int attacks,hits,heartsCollected;
         public float pressure,pressureAccuracy,pressureSeconds;
+        public br.edu.motionbound.input.TiltSprint.Consistency motorConsistency;
         public String message = "";
         public DungeonMap dungeon;
         public CampaignLevel level=CampaignLevel.of(1);
@@ -613,7 +614,7 @@ public final class GameUi implements Disposable {
 
     private void stat(float x, float y, String label, String value, Color color) {
         socket(x + 8, y + 28, 56);
-        icons.draw(batch, label.equals("GUARDIÕES") ? Icon.SKULL : Icon.CLOCK, x + 12, y + 32, 48);
+        icons.draw(batch, label.equals("GUARDIÕES") ? Icon.SKULL : label.equals("CONSISTÊNCIA")?Icon.BOLT:Icon.CLOCK, x + 12, y + 32, 48);
         label(small, label, x + 76, y + 90, MUTED);
         label(heading, value, x + 76, y + 60, color);
     }
@@ -745,17 +746,31 @@ public final class GameUi implements Disposable {
         int letters=reducedEffects?title.length():Math.min(title.length(),(int)(screenAge*65));
         label(heading,title.substring(0,letters),width/2-heading.width(title)/2,y+398,WHITE);
         center(small, completed?"A seguir: "+CampaignLevel.of(v.level.number()+1).title():won?"Você atravessou as cinco fases da jornada.":"Recupere o fôlego e tente uma nova estratégia.", width / 2, y + 338, MUTED);
-        if(reducedEffects||screenAge>.2f)stat(x + 185, y + 185, "GUARDIÕES", v.defeated + " / " + v.total, MINT);
-        if(reducedEffects||screenAge>.4f)stat(x + 435, y + 185, "TEMPO ATIVO", time(v.elapsed), GOLD);
-        if(v.mode==GameMode.REHABILITATION)
-            center(small,v.physicalControls?"EDGE / inclinação e gestos / curas automáticas":"SIMULAÇÃO / pressão na faixa: "+Math.round(v.pressureAccuracy)+"% / dados artificiais",width/2,y+186,BLUE);
-        else if(completed)center(small,"Descanse: vida, mana e poções renovadas na próxima fase.",width/2,y+186,MUTED);
+        boolean motor=v.mode==GameMode.REHABILITATION;
+        if(reducedEffects||screenAge>.2f)stat(x + (motor?85:185), y + 220, "GUARDIÕES", v.defeated + " / " + v.total, MINT);
+        if(reducedEffects||screenAge>.4f)stat(x + (motor?320:435), y + 220, "TEMPO ATIVO", time(v.elapsed), GOLD);
+        if(motor) {
+            stat(x+555,y+220,"CONSISTÊNCIA",motorScore(v,v.level.number()),BLUE);
+            for(int i=1;i<=5;i++) {
+                float sx=x+85+(i-1)*144;
+                label(small,"FASE "+i,sx,y+225,MUTED);
+                label(body,motorScore(v,i),sx,y+202,i==v.level.number()?BLUE:WHITE);
+            }
+            if(v.physicalControls)center(small,"Inclinação na faixa / mínimo de 4s válidos / N/D: dados insuficientes",width/2,y+178,MUTED);
+        }
+        if(v.mode==GameMode.REHABILITATION&&!v.physicalControls)
+            center(small,"SIMULAÇÃO / pressão na faixa: "+Math.round(v.pressureAccuracy)+"% / consistência física: N/D",width/2,y+178,BLUE);
+        else if(!motor&&completed)center(small,"Descanse: vida, mana e poções renovadas na próxima fase.",width/2,y+186,MUTED);
         if (button(width / 2 - 205, y + 99, 410, 54, completed?"Seguir para a fase "+(v.level.number()+1):won?"Nova campanha":"Tentar esta fase", true, false))
             action=completed?Action.NEXT_STAGE:won?Action.NEW_GAME:Action.RETRY_STAGE;
-        if (button(width / 2 - 205, y + 40, 410, 44, completed?"Salvar e sair":"Sair do jogo", false, true)) {
-            if(completed)action=Action.SAVE_EXIT;else Gdx.app.exit();
+        if (button(width / 2 - 205, y + 40, 410, 44, completed||won&&v.physicalControls?"Salvar e sair":"Sair do jogo", false, true)) {
+            if(completed||won&&v.physicalControls)action=Action.SAVE_EXIT;else Gdx.app.exit();
         }
         if(!v.message.isEmpty())center(small,v.message,width/2,y-22,RED);
+    }
+    private String motorScore(View view,int number) {
+        int score=view.physicalControls&&view.motorConsistency!=null?view.motorConsistency.score(number):-1;
+        return score<0?"N/D":score+"%";
     }
 
     private boolean button(float x, float y, float w, float h, String text, boolean active, boolean danger) {

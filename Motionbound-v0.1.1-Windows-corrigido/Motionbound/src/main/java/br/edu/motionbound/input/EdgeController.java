@@ -13,6 +13,9 @@ public final class EdgeController implements ControlSource,AutoCloseable {
     private final ArrayBlockingQueue<Received> queue=new ArrayBlockingQueue<>(64);
     private final Preferences preferences;
     private final TiltSprint sprint=new TiltSprint();
+    public final TiltSprint.Consistency consistency=new TiltSprint.Consistency();
+    private final java.util.ArrayDeque<Received> motorSamples=new java.util.ArrayDeque<>();
+    private Received motorPrevious;
     private volatile boolean running;
     private volatile SerialPort port;
     private volatile String transport="Conecte a Edge pelo USB";
@@ -37,11 +40,12 @@ public final class EdgeController implements ControlSource,AutoCloseable {
         running=true;worker=new Thread(this::receive,"Motionbound-USB");worker.setDaemon(true);worker.start();
     }
     public void update(long time) {
+        motorSamples.clear();
         now=time;pressed=0;attack=magic=false;
         Received received;
         while((received=queue.poll())!=null)if(time-received.time<=STALE_NS)accept(received.frame,received.time);
         now=time;
-        if(!connected()){calibrated=calibrating=false;armed=false;filteredX=filteredY=0;pressed=0;attack=magic=false;sprint.reset();}
+        if(!connected()){calibrated=calibrating=false;armed=false;filteredX=filteredY=0;pressed=0;attack=magic=false;sprint.reset();interruptMotor();}
     }
     /** Also used by deterministic protocol tests, without opening a physical port. */
     public void accept(EdgeFrame frame,long time) {
@@ -50,12 +54,14 @@ public final class EdgeController implements ControlSource,AutoCloseable {
         if(!first){long distance=EdgeFrame.distance(frame.sequence(),previous.sequence());if(distance==0||distance>0x7fffffffL)return;}
         if(first){calibrated=calibrating=false;armed=false;filteredX=filteredY=0;pressed=0;attack=magic=false;sprint.reset();}
         if(frame.flags()!=7){calibrated=calibrating=false;armed=false;pressed=0;attack=magic=false;sprint.reset();}
+        if(first||frame.flags()!=7)interruptMotor();
         if(!first&&armed&&frame.flags()==7) {
             pressed|=frame.buttons()&~previous.buttons();
             long attacks=EdgeFrame.distance(frame.attacks(),previous.attacks()),casts=EdgeFrame.distance(frame.magic(),previous.magic());
             attack|=attacks>0&&attacks<=2;magic|=casts>0&&casts<=2;
         }
         previous=frame;lastTime=time;
+        if(ready()){if(motorSamples.size()==64)motorSamples.removeFirst();motorSamples.addLast(new Received(frame,time));}
         if(frame.buttons()==0&&frame.flags()==7)armed=true;
         if(calibrating&&frame.flags()==7) {
             double norm=frame.x()*frame.x()+frame.y()*frame.y()+frame.z()*frame.z();
@@ -87,11 +93,23 @@ public final class EdgeController implements ControlSource,AutoCloseable {
     public void saveSettings(){reset();if(preferences!=null)preferences.putBoolean("swap",swapAxes).putBoolean("invertX",invertX)
             .putBoolean("invertY",invertY).putInteger("sensitivity",sensitivity).flush();}
     public String sensitivityLabel(){return sensitivity==0?"Suave (mais inclinação)":sensitivity==1?"Média":"Alta (menos inclinação)";}
+    public float tiltRange(){return sensitivity==0?.50f:sensitivity==1?.35f:.23f;}
     @Override public PlayerCommand read(float delta) {
         PlayerCommand command=new PlayerCommand();command.assistedAim=true;
         if(!ready()){sprint.reset();return command;}
         float x=tiltX(),y=tiltY();if(swapAxes){float t=x;x=y;y=t;}if(invertX)x=-x;if(invertY)y=-y;
-        float range=sensitivity==0?.50f:sensitivity==1?.35f:.23f;
+        float range=tiltRange();
+        for(Received sample:motorSamples) {
+            if(motorPrevious!=null&&sample.frame.boot()==motorPrevious.frame.boot()
+                    &&EdgeFrame.distance(sample.frame.sequence(),motorPrevious.frame.sequence())==1) {
+                double duration=(sample.time-motorPrevious.time)/1_000_000_000d;
+                float mx=sample.frame.x()-neutralX,my=sample.frame.y()-neutralY;
+                if(swapAxes){float t=mx;mx=my;my=t;}if(invertX)mx=-mx;if(invertY)my=-my;
+                consistency.sample(mx,my,duration,range,!sprint.needsRelease());
+            }
+            motorPrevious=sample;
+        }
+        motorSamples.clear();
         float smoothing=1-(float)Math.exp(-14*Math.max(0,delta));
         filteredX=MathUtils.lerp(filteredX,axis(x,range),smoothing);filteredY=MathUtils.lerp(filteredY,axis(y,range),smoothing);
         command.direction.set(filteredX,filteredY).limit(1);command.aim.set(command.direction);
@@ -99,7 +117,8 @@ public final class EdgeController implements ControlSource,AutoCloseable {
         command.attack=attack;command.magic=magic;attack=magic=false;return command;
     }
     private static float axis(float value,float range){return Math.abs(value)<=.07f?0:Math.signum(value)*MathUtils.clamp((Math.abs(value)-.07f)/(range-.07f),0,1);}
-    @Override public void reset(){attack=magic=false;filteredX=filteredY=0;sprint.reset();}
+    private void interruptMotor(){motorSamples.clear();motorPrevious=null;consistency.interrupt();}
+    @Override public void reset(){attack=magic=false;filteredX=filteredY=0;sprint.reset();interruptMotor();}
 
     private void receive() {
         try {

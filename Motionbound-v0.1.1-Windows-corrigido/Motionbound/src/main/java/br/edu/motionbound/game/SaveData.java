@@ -1,6 +1,7 @@
 package br.edu.motionbound.game;
 
 import br.edu.motionbound.input.GameMode;
+import br.edu.motionbound.input.TiltSprint;
 import com.badlogic.gdx.files.FileHandle;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.Json;
@@ -32,6 +33,7 @@ public final class SaveData {
     public int guidedTargetIndex=-1;
     public int attacks, hits, magicCasts, healsUsed, heartsCollected;
     public float pressureSeconds, pressureInBandSeconds;
+    public TiltSprint.Consistency motorConsistency=new TiltSprint.Consistency();
     public Array<EnemyData> enemies = new Array<>();
     public Array<SpellData> spells = new Array<>();
     public Array<HeartData> hearts = new Array<>();
@@ -124,6 +126,8 @@ public final class SaveData {
     }
 
     public void validate() {
+        if(motorConsistency==null)throw new IllegalArgumentException("Missing motor metric");
+        motorConsistency.validate();
         DungeonMap map = new DungeonMap(stage);
         int total=map.level.enemyCount()+summonedBats;
         if (version != 8 || !position(map, x, y, 5) || !Float.isFinite(hp)||hp < .5f || hp > 6 || hp*2!=(int)(hp*2) || heals < 0 || heals > 3
