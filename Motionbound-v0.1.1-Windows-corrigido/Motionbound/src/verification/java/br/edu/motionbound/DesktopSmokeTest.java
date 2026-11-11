@@ -596,6 +596,7 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
             if(scene()==Screen.LEVEL_INTRO)advanceIntro(CampaignLevel.INTRO_SECONDS);
             quietEnemies((Array<?>)get(game,"enemies"));
             Object player=get(game,"player");verifyPhysicalSprint(controller,player);
+            verifyMotorResults(controller);player=get(game,"player");
             float x=(float)get(player,"x"),y=(float)get(player,"y");
             physicalPacket(0,.37f,.32f);game.render();step(.15f);
             require((float)get(player,"x")>x&&(float)get(player,"y")>y,"Physical tilt moves diagonally");
@@ -626,6 +627,41 @@ public final class DesktopSmokeTest extends ApplicationAdapter {
         } finally {
             key=-1;click=false;held.clear();controller.close();set(game,"edge",previousEdge);set(game,"saveFile",backup);
             call(game,"loadGame");set(game,"saveFile",previous);set(game,"hasSave",hadSave);set(game,"scene",Screen.PAUSED);
+        }
+    }
+    private void verifyMotorResults(EdgeController controller) throws Exception {
+        FileHandle previous=(FileHandle)get(game,"saveFile"),backup=output.child("before-motor-results.json");
+        ((SaveData)call(game,"captureSave")).write(backup);
+        FileHandle results=output.child("motor-results.json");
+        try {
+            set(game,"saveFile",results);call(game,"newCampaign");
+            for(int stage=1;stage<=5;stage++) {
+                advanceIntro(CampaignLevel.INTRO_SECONDS);
+                for(int n=0;n<200;n++)controller.consistency.sample(n<(6-stage)*40?.35f:.17f,0,.02,.35f,true);
+                int expected=(6-stage)*20;
+                require(controller.consistency.score(stage)==expected,"Current stage has a measured consistency score");
+                Array<?> enemies=(Array<?>)get(game,"enemies");for(Object enemy:enemies)set(enemy,"hp",0);
+                call(game,"resolveDeaths");
+                Object player=get(game,"player");DungeonMap map=(DungeonMap)get(game,"dungeon");
+                set(player,"x",map.exitX());set(player,"y",map.exitY());
+                physicalPacket(0,.02f,-.03f);controller.update(System.nanoTime());step(.02f);
+                require(scene()==(stage==5?Screen.VICTORY:Screen.LEVEL_COMPLETE),"The existing result screen completes normally");
+                SaveData saved=SaveData.read(results);
+                for(int earlier=1;earlier<=stage;earlier++)require(saved.motorConsistency.score(earlier)==(6-earlier)*20,
+                        "Stage completion automatically persists all earlier physical scores");
+                if(stage==1){game.render();screenshot("80-motor-consistency-result");}
+                if(stage<5) {
+                    call(game,"nextStage");
+                    require(controller.consistency.score(stage+1)==-1,"An unmeasured new stage displays N/D");
+                }
+            }
+            call(game,"loadGame");
+            require(controller.consistency.score(1)==100&&controller.consistency.score(5)==20,"Loading retains the five-stage comparison");
+            set(controller,"lastTime",System.nanoTime());game.render();screenshot("81-motor-consistency-history");
+            call(game,"newCampaign");require(controller.consistency.score(1)==-1&&controller.consistency.score(5)==-1,
+                    "New campaign clears the comparison instead of carrying another campaign's results");
+        } finally {
+            set(game,"saveFile",backup);call(game,"loadGame");set(game,"saveFile",previous);set(game,"scene",Screen.PLAYING);
         }
     }
     private void verifyGuidedCombat() throws Exception {

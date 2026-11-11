@@ -183,6 +183,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         ui.resize(Gdx.graphics.getWidth(),Gdx.graphics.getHeight());
     }
     private void resetWorld() {
+        edge.consistency.beginStage(stage);
         ui.resetPresentation();irisOpen=irisClose=hitStop=0;
         dungeon=new DungeonMap(stage);
         navigator=new DungeonNavigator(dungeon);
@@ -209,7 +210,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         resetWorld();introRemaining=CampaignLevel.INTRO_SECONDS;irisOpen=.6f;
         controls.reset();message="";scene=Screen.LEVEL_INTRO;resumeScene=scene;
     }
-    private void newCampaign() {stage=1;startStage();}
+    private void newCampaign() {edge.consistency.clear(edge.tiltRange());stage=1;startStage();}
     private void nextStage() {
         if(!stageComplete||dungeon.level.last())return;
         stage++;startStage();
@@ -292,6 +293,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         uiView.teleportPending=teleportPending;
         uiView.mode=mode;uiView.savedMode=savedMode;
         uiView.controller=edge;uiView.physicalControls=physicalControls;
+        uiView.motorConsistency=edge.consistency;
         uiView.sprintProgress=physicalControls?edge.sprintProgress():0;
         uiView.sprintNeedsRelease=physicalControls&&edge.sprintNeedsRelease();
         uiView.sprinting=player.running&&(!physicalControls||edge.sprintProgress()>=1);
@@ -406,6 +408,11 @@ public final class MotionboundGame extends ApplicationAdapter {
         updateTransient(dt);
         if(!teleportPending&&defeated==totalEnemies && Vector2.dst2(player.x,player.y,dungeon.exitX(),dungeon.exitY())<(18*18)) {
             stageComplete=true;irisClose=.5f;controls.reset();guidedStrike.reset();guidedTarget=null;scene=dungeon.level.last()?Screen.VICTORY:Screen.LEVEL_COMPLETE;resumeScene=scene;
+            if(physicalControls) {
+                try{captureSave().write(saveFile);hasSave=true;savedMode=mode;}
+                catch(Exception e){message="Não foi possível salvar o resultado. Use Salvar e sair para tentar novamente.";
+                    Gdx.app.error("Motionbound","Falha ao salvar resultado",e);}
+            }
         }
         if(player.hp<=0){guidedStrike.reset();guidedTarget=null;scene=Screen.DEFEAT;}
     }
@@ -1325,6 +1332,7 @@ public final class MotionboundGame extends ApplicationAdapter {
         data.guidedStrike.copyFrom(guidedStrike);
         data.guidedTargetIndex=guidedStrike.active()?enemies.indexOf(guidedTarget,true):-1;
         data.attacks=attacks;data.hits=hits;data.magicCasts=magicCasts;data.healsUsed=healsUsed;data.heartsCollected=heartsCollected;
+        data.motorConsistency.copyFrom(edge.consistency,stage);
         if(controls instanceof SimulatedSensorSource simulated) {
             data.pressureSeconds=simulated.sensors.pressureSeconds;data.pressureInBandSeconds=simulated.sensors.pressureInBandSeconds;
         }
@@ -1377,6 +1385,7 @@ public final class MotionboundGame extends ApplicationAdapter {
             if(data.physicalController){physicalControls=true;controls=edge;}
             stage=data.stage;
             resetWorld();
+            edge.consistency.copyFrom(data.motorConsistency,stage);
             introRemaining=data.introRemaining;stageComplete=data.stageComplete;
             summonedBats=data.summonedBats;riftsCast=data.riftsCast;totalEnemies=dungeon.level.enemyCount()+summonedBats;
             player.effects.copyFrom(data.effects);

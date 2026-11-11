@@ -27,6 +27,7 @@ public final class SaveDataTest {
         groundAreaCheckpoint();
         teleportCheckpoint();
         guidedCheckpoint();
+        motorCheckpoint();
         data.hp=4.5f;data.effects.apply(PotionEffect.POISON);data.effects.advance(.4f);
         SaveData poisoned=SaveData.decode(data.encode());
         require(poisoned.hp==4.5f&&poisoned.effects.ticksRemaining==4&&poisoned.effects.damageEffect==PotionEffect.POISON,"Half hearts and afflictions round-trip");
@@ -64,6 +65,18 @@ public final class SaveDataTest {
         require(SaveData.read(file).hp == 3, "Last good checkpoint preserved");
         Files.delete(file.file().toPath()); Files.delete(directory);
         System.out.println("PASS: save round-trip, combat state, invalid data and safe replacement");
+    }
+    private static void motorCheckpoint() {
+        SaveData data=checkpoint();
+        for(int stage=1;stage<=5;stage++) {
+            data.motorConsistency.beginStage(stage);
+            for(int i=0;i<200;i++)data.motorConsistency.sample(i<100?.35f:.17f,0,.02,.35f,true);
+        }
+        SaveData copy=SaveData.decode(data.encode());
+        for(int stage=1;stage<=5;stage++)require(copy.motorConsistency.score(stage)==50,"Motor history survives saving every phase");
+        data.motorConsistency.inBand[1]=Double.NaN;invalid(data);data.motorConsistency.inBand[1]=2;
+        data.motorConsistency.samples=new int[4];invalid(data);
+        require(checkpoint().motorConsistency.score(1)==-1,"Old checkpoints begin without fabricated sensor results");
     }
     private static void guidedCheckpoint() {
         SaveData data=checkpoint();data.mode=br.edu.motionbound.input.GameMode.REHABILITATION;
