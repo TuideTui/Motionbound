@@ -645,16 +645,16 @@ public final class GameUi implements Disposable {
             for(int i=0;i<6;i++) {
                 float cx=x+14+(i%2)*336,cy=y+297-(i/2)*96;
                 switch(i) {
-                    case 0 -> {lesson(cx,cy,"Inclinar a mão","Incline para mover. Forte por 4s: corre.");prompts.draw(batch,InputPrompts.TILT_UP,cx+18,cy+45,32);prompts.draw(batch,InputPrompts.TILT_DOWN,cx+50,cy+13,32);}
-                    case 1 -> {lesson(cx,cy,"Virar para os lados","Incline para esquerda ou direita.");prompts.draw(batch,InputPrompts.TURN_LEFT,cx+12,cy+29,32);prompts.draw(batch,InputPrompts.TURN_RIGHT,cx+48,cy+29,32);}
-                    case 2 -> {lesson(cx,cy,"Espada guiada","Gesto lateral: avança no alvo. De perto: golpe e recuo.");item(103,cx+16,cy+22,44);prompts.draw(batch,InputPrompts.TURN_RIGHT,cx+55,cy+45,28);}
-                    case 3 -> {lesson(cx,cy,"Gesto para cima","Passe a mão para cima: magia. Gasta 25 de mana.");item(116,cx+16,cy+22,44);prompts.draw(batch,InputPrompts.TILT_UP,cx+55,cy+45,28);}
+                    case 0 -> {lesson(cx,cy,"Inclinar a mão","Incline para frente ou trás para mover o personagem.");prompts.draw(batch,InputPrompts.TILT_UP,cx+18,cy+45,32);prompts.draw(batch,InputPrompts.TILT_DOWN,cx+50,cy+13,32);}
+                    case 1 -> {lesson(cx,cy,"Virar para os lados","Incline aos lados para mover o personagem.");prompts.draw(batch,InputPrompts.TURN_LEFT,cx+12,cy+29,32);prompts.draw(batch,InputPrompts.TURN_RIGHT,cx+48,cy+29,32);}
+                    case 2 -> {lesson(cx,cy,"Gesto de ataque","Passe a mão sobre o sensor para a direita: ataque.");item(103,cx+16,cy+22,44);icons.draw(batch,Icon.RIGHT_ARROW,cx+54,cy+47,28);}
+                    case 3 -> {lesson(cx,cy,"Marcação guiada","Marca o inimigo mais próximo para guiar o ataque.");icons.draw(batch,Icon.SKULL,cx+15,cy+16,54);icons.draw(batch,Icon.CROSSHAIR,cx+54,cy+47,28);}
                     case 4 -> {lesson(cx,cy,"Menu pelo Keypad","1: pausa/volta. 2/4: navega. 3: confirma, inclusive abas.");icons.draw(batch,Icon.PAUSE,cx+27,cy+25,40);}
                     default -> {lesson(cx,cy,"Cura automática","1 coração: cura +2 e limpa fogo/veneno. 3 usos.");item(115,cx+26,cy+22,44);}
                 }
             }
             label(small,"Alvo dourado: avanço. Verde: golpe e recuo. Alcance auxiliar: 3x a espada.",x+16,y+103,PAPER_TEXT);
-            label(small,"Gestos a 2-5 cm; retire a mão após passar. Simulação extra: IJKL move, F ataca.",x+16,y+84,PAPER_MUTED);
+            label(small,"Magia: gesto para cima (25 mana). Corrida: incline forte por 4s. APDS: 2-5 cm; retire a mão.",x+16,y+84,PAPER_MUTED);
         } else {
             for(int i=0;i<6;i++) {
                 float cx=x+14+(i%2)*336,cy=y+297-(i/2)*96;
