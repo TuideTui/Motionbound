@@ -5,7 +5,7 @@
 **Nome:** Arthur Cezar da Silveira Lima
 **RA:** 10409172
 
-Motionbound é um jogo sério de ação e aventura 2D, com visão *top-down* e arte em *pixel art*, desenvolvido em Java com o framework libGDX para a disciplina de Jogos Digitais. O jogador atravessa cinco cenários, enfrenta criaturas e utiliza espada, magia e cura para avançar na campanha.
+Motionbound é um jogo de ação e aventura 2D, com visão *top-down* e arte em *pixel art*, desenvolvido em Java com o framework libGDX para a disciplina de Jogos Digitais. O jogador atravessa cinco cenários, enfrenta criaturas e utiliza espada, magia e cura para avançar na campanha.
 
 O diferencial do projeto é o **modo reabilitação**, no qual os comandos são produzidos por movimentos físicos captados por uma **BlackBoard Edge (ESP32)** e sensores conectados. A proposta é utilizar a gamificação para estimular coordenação, inclinação e controle de movimentos de mão e punho, integrando uma atividade motora a uma experiência de exploração e combate.
 
