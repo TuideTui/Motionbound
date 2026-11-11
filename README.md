@@ -1,196 +1,298 @@
-# Motionbound
+# Motionbound ⚔️
 
-**Um dungeon crawler 2D em pixel art controlado por movimentos físicos.**
+**Do movimento real à aventura virtual.**
 
-**Motionbound** é um projeto acadêmico de jogo sério desenvolvido para a disciplina de Jogos Digitais. Inspirado nas mecânicas de exploração e combate de jogos do gênero *dungeon crawler*, o projeto propõe uma aventura de fantasia em que o jogador explora masmorras, enfrenta monstros e utiliza ataques, magias e cura. O diferencial está no controle: em vez dos comandos tradicionais de teclado, os movimentos do personagem serão realizados por meio de um dispositivo físico com Arduino/ESP32 e sensores.
+**Nome:** Arthur Cezar da Silveira Lima
+**RA:** 10409172
 
-O projeto busca explorar a **gamificação de atividades motoras de mão, punho e antebraço**, reunindo uma experiência de jogo com indicadores de execução e evolução dos movimentos. Trata-se de um protótipo educacional, não de uma ferramenta clínica validada.
+Motionbound é um jogo sério de ação e aventura 2D, com visão *top-down* e arte em *pixel art*, desenvolvido em Java com o framework libGDX para a disciplina de Jogos Digitais. O jogador atravessa cinco cenários, enfrenta criaturas e utiliza espada, magia e cura para avançar na campanha.
 
-> **Estado atual:** fase de definição e planejamento. As mecânicas, os componentes e os cenários descritos neste documento constituem a **proposta de desenvolvimento**, não funcionalidades já implementadas.
+O diferencial do projeto é o **modo reabilitação**, no qual os comandos são produzidos por movimentos físicos captados por uma **BlackBoard Edge (ESP32)** e sensores conectados. A proposta é utilizar a gamificação para estimular coordenação, inclinação e controle de movimentos de mão e punho, integrando uma atividade motora a uma experiência de exploração e combate.
 
-## Informações do projeto
+> **Versão documentada:** `0.1.1` — protótipo acadêmico para Windows, com cinco fases e integração USB implementada. O Motionbound não é um dispositivo médico nem uma ferramenta de reabilitação clinicamente validada.
 
-| Item | Definição |
+## 1. Visão geral
+
+| Item | Descrição |
 | --- | --- |
-| **Nome** | Motionbound |
-| **Gênero** | Dungeon crawler / RPG de ação |
-| **Estilo visual** | 2D top-down, pixel art |
-| **Linguagem e framework** | Java com libGDX |
-| **Dispositivo de entrada** | Arduino ou ESP32 com sensores (a definir) |
-| **Foco motor** | Mão, punho e antebraço |
-| **Estrutura** | Fase 0 (tutorial) e fases 1 a 5 |
-| **Metodologia** | Kanban, com acompanhamento semanal pelo Trello |
-| **Turma** | 4H12 |
+| Gênero | RPG de ação / *dungeon crawler* |
+| Perspectiva | 2D *top-down* |
+| Visual | *Pixel art* |
+| Jogadores | 1 |
+| Plataforma | Windows (desktop) |
+| Linguagem | Java 17+ |
+| Framework | libGDX 1.14.2, backend LWJGL3 |
+| Build | Gradle 9.1.0, obtido pelo script de inicialização |
+| Comunicação com hardware | USB/Serial com jSerialComm 2.11.4 |
+| Controle IoT | BlackBoard Edge, acelerômetro, BRIICK APDS-9960 e BRIICK Keypad |
+| Modos | Convencional, reabilitação com hardware e simulação para testes |
+| Organização | Git/GitHub e quadro Kanban no Trello |
 
-## Objetivo
+**Links do projeto:** [GitHub](https://github.com/TuideTui/Motionbound) · [Trello](https://trello.com/b/iN2g5cul/projeto-de-jogos-motionbound)
 
-Criar um jogo funcional no qual a movimentação e as principais ações do personagem sejam controladas por dados coletados de um dispositivo IoT. A proposta é transformar movimentos físicos em desafios de exploração e combate, com feedback sobre aspectos como amplitude, estabilidade e precisão.
+## 2. Objetivo e contexto
 
-O projeto procura trabalhar, de forma lúdica:
+O Motionbound investiga como ações de um jogo podem ser associadas a movimentos físicos de mão e punho. A inclinação do controlador movimenta o personagem; gestos reconhecidos por um sensor acionam ataques e magia. A campanha oferece objetivos, desafios graduais e retorno visual imediato às ações do jogador.
 
-- movimentos de inclinação e rotação de mão e punho;
-- coordenação motora durante comandos direcionais;
-- estabilidade ao manter determinadas posições;
-- controle da pressão exercida pela mão, se o sensor escolhido permitir;
-- percepção da evolução do desempenho ao longo das partidas.
+O objetivo acadêmico é demonstrar a integração entre **jogo digital, sensores e dispositivo IoT**. A dificuldade aumenta pela variedade de inimigos e pelas situações de jogo, sem impor automaticamente maior amplitude de movimento em cada fase. A configuração do controle permite adaptar direção e sensibilidade para uma posição confortável.
 
-**Importante:** os exercícios e faixas de movimento deverão ser calibrados conforme limites confortáveis do usuário. A dificuldade do jogo não deve exigir aumento indiscriminado de esforço físico. O dispositivo e a proposta de uso de outros movimentos IoT serão validados com o professor.
+## 3. Funcionalidades implementadas
 
-## Como será o jogo
+- **Campanha com cinco fases:** mapas e ambientações diferentes, inimigos progressivos e baú de saída liberado após eliminar os guardiões.
+- **Dois modos principais:** convencional (teclado/mouse) e reabilitação (BlackBoard Edge + APDS-9960 + Keypad). Há também uma simulação identificada na interface para testes sem hardware.
+- **Combate:** espada corpo a corpo, magia à distância, barra de mana, vigor, dano, recuo, cura, coleta de corações e diferentes estados negativos.
+- **Combate assistido no modo reabilitação:** marcação do inimigo visível mais próximo, aproximação orientada e golpe por gesto, com recuo após ataques próximos.
+- **Inimigos com comportamentos distintos:** slime, esqueleto, mago, bruxo, ciclope, fantasma e morcego.
+- **Efeitos de frascos:** fogo, veneno, lentidão e fenda de teletransporte, com áreas temporárias e efeitos visuais próprios.
+- **Interface:** menu principal, seleção de modo, tutorial, bestiário, HUD de vida/vigor/mana, pausa, configurações, tela de derrota, conclusão de fase e vitória da campanha.
+- **Acessibilidade e conforto visual:** opção de efeitos reduzidos, que diminui animações e flashes e desativa algumas distorções visuais.
+- **Persistência:** opção de salvar e sair, continuar expedição e retomar o progresso da campanha.
+- **Controle físico:** descoberta da conexão USB, calibração, ajuste de sensibilidade e orientação dos eixos, leitura de inclinação/gestos e pausa segura quando o dispositivo deixa de responder.
 
-O jogador controlará um personagem em uma aventura por masmorras e cenários de fantasia. A progressão será baseada na exploração, no enfrentamento de inimigos e no uso estratégico de habilidades.
+### 3.1. Fases da campanha
 
-**Mecânicas planejadas:**
+| Fase | Cenário | Dificuldade | Guardiões iniciais |
+| --- | --- | --- | ---: |
+| 1 | A Cripta Esquecida | Fácil | 7 |
+| 2 | Vila das Lanternas | Moderado | 10 |
+| 3 | Campos Corrompidos | Intermediário | 14 |
+| 4 | Passagem Congelada | Difícil | 18 |
+| 5 | Fortaleza do Crepúsculo | Muito difícil | 22 |
 
-- movimentação em diferentes direções, caminhada e corrida;
-- combate corpo a corpo e ataque carregado;
-- lançamento de magia;
-- cura e gerenciamento de vida;
-- inimigos com comportamentos e ataques próprios;
-- cenários, armadilhas, objetivos e progressão de fases;
-- interface com vida, habilidades, pausa e reinício;
-- resultados ao final das fases com métricas dos movimentos.
+Cada etapa tem apresentação própria, contagem inicial e uma saída identificada no minimapa. Ao concluir uma fase, o jogador pode seguir ou salvar e sair. A dificuldade é ampliada principalmente pela quantidade e diversidade de inimigos. Em algumas fases, as fendas podem invocar morcegos adicionais.
 
-### Controles por movimentos físicos
+### 3.2. Mecânicas de combate
 
-A associação inicial entre movimentos e ações será testada e ajustada após a montagem do protótipo:
+O personagem utiliza espada e magia, gerenciando vida, vigor e mana. Os inimigos têm tempos de preparação que permitem identificar e evitar ataques. Algumas criaturas lançam frascos que deixam áreas temporárias no cenário:
 
-| Movimento captado | Ação planejada no jogo | Aspecto motor observado |
-| --- | --- | --- |
-| Inclinar o controlador | Andar na direção correspondente | Direção e amplitude |
-| Aumentar a inclinação dentro de uma faixa confortável | Correr | Controle gradual do movimento |
-| Pressionar um sensor de preensão | Ataque básico | Controle da pressão |
-| Manter pressão por um intervalo curto | Ataque carregado | Manutenção da pressão |
-| Rotacionar o punho | Lançar magia | Rotação e precisão |
-| Manter a posição estável por alguns segundos | Ativar cura | Estabilidade |
+| Frasco | Efeito |
+| --- | --- |
+| Vermelho | Queimadura e dano periódico |
+| Verde | Veneno e dano periódico |
+| Cinza | Lentidão temporária |
+| Azul | Teletransporte e invocação limitada de morcegos |
 
-As ações deverão ser executadas **pelo dispositivo físico**, sem exigir teclado ou controle convencional durante a partida. Controles temporários de teste podem ser utilizados apenas nas primeiras etapas de desenvolvimento.
+No **modo reabilitação**, o combate usa assistência de mira para reduzir a necessidade de posicionamento fino do personagem. A cura é automática quando a vida chega a um coração ou menos, desde que ainda existam cargas disponíveis. No **modo convencional**, a cura é acionada manualmente.
 
-## Integração com Arduino/IoT
+## 4. Integração IoT: como foi implementada
 
-O protótipo deverá captar movimentos do jogador, processá-los e enviá-los ao aplicativo em Java/libGDX.
+O controle físico utiliza estes componentes:
 
-**Componentes em avaliação:**
+| Componente | Responsabilidade |
+| --- | --- |
+| **BlackBoard Edge (ESP32)** | Executa o firmware e transmite dados ao computador via USB |
+| **Acelerômetro MMA8452Q da Edge** | Fornece leituras de aceleração usadas para interpretar a inclinação do controle |
+| **BRIICK APDS-9960** | Reconhece gestos da mão realizados sobre o sensor |
+| **BRIICK Keypad** | Permite navegar, confirmar e voltar nos menus |
 
-- **Arduino ou ESP32:** placa responsável pela leitura dos sensores;
-- **MPU6050:** sensor inercial para estimar inclinação, rotação e movimentação;
-- **sensor de pressão/preensão:** para reconhecer comandos de ataque;
-- **conexão USB/Serial:** canal inicial proposto para enviar os dados ao jogo.
+O firmware está em [`firmware/MotionboundDiagnostico/`](Motionbound-v0.1.1-Windows-corrigido/Motionbound/firmware/MotionboundDiagnostico/) e contém o sketch Arduino e o decodificador de gestos `SwipeDecoder.h`.
 
-**Fluxo planejado:**
-
-```text
-Movimentos da mão / punho
-           |
-           v
-    Sensores físicos
-           |
-           v
-     Arduino / ESP32
-           |
-           v
-  Comunicação USB/Serial
-           |
-           v
-   Leitura de dados em Java
-           |
-           v
-  Controle e lógica do libGDX
-           |
-           v
-   Personagem e habilidades
-           |
-           v
-       Métricas do jogo
-```
-
-Antes de definir os valores de ativação, será criada uma etapa de **calibração**, incluindo posição neutra e amplitude confortável. O sensor inercial não mede diretamente força de preensão: essa informação dependerá de um sensor específico.
-
-## Fases planejadas
-
-| Fase | Cenário | Objetivo e novidade |
-| --- | --- | --- |
-| **0** | Campo de Treinamento | Tutorial, calibração e aprendizado dos comandos físicos. |
-| **1** | Cripta Abandonada | Exploração e primeiros confrontos contra inimigos simples. |
-| **2** | Minas Perdidas | Armadilhas e inimigos com ataques à distância. |
-| **3** | Floresta Corrompida | Inimigos especiais e utilização estratégica das habilidades. |
-| **4** | Fortaleza | Combinação de desafios e mecânicas das fases anteriores. |
-| **5** | Dungeon Final | Confronto com um chefe e encerramento da aventura. |
-
-A dificuldade aumentará principalmente na complexidade das situações e decisões do jogo, **não necessariamente no esforço físico solicitado**.
-
-## Métricas de desempenho
-
-O jogo pretende registrar indicadores derivados das leituras do controlador e apresentá-los ao final das fases:
-
-- **Amplitude:** extensão dos movimentos realizados em relação à calibração;
-- **Precisão:** proximidade dos movimentos em relação às faixas ou posições solicitadas;
-- **Estabilidade:** variação do sinal durante desafios de manutenção de posição;
-- **Controle de pressão:** comportamento do sensor de preensão durante os comandos;
-- **Evolução:** comparação dos indicadores entre fases ou sessões, quando implementada.
-
-As métricas servirão para dar feedback sobre a execução **dentro do jogo**. Elas não substituem avaliação médica, fisioterapêutica ou de terapia ocupacional e não comprovam, por si só, melhora clínica.
-
-## Tecnologias previstas
-
-- **Java** — lógica e sistemas do jogo;
-- **libGDX** — renderização, entrada, cenas e mecânicas 2D;
-- **Arduino/ESP32** — leitura dos sensores de movimento;
-- **Comunicação Serial** — integração inicial hardware/software;
-- **Gradle** — gerenciamento e build do projeto Java;
-- **Git e GitHub** — versionamento e acompanhamento de contribuições;
-- **Trello** — organização das entregas pelo método Kanban.
-
-> A arquitetura das classes, bibliotecas de comunicação Serial e requisitos de execução serão documentados quando o protótipo for criado.
-
-## Organização prevista do projeto
+**Fluxo de comunicação:**
 
 ```text
-Motionbound/
-├── README.md
-├── docs/                 # Planejamento e documentação do projeto
-├── game/                 # Código Java/libGDX (estrutura a definir)
-├── hardware/             # Código e esquemas do controlador
-└── assets/               # Sprites, mapas, sons e recursos do jogo
+Movimentos físicos e gestos
+           |
+           v
+Edge / acelerômetro / APDS-9960 / Keypad
+           |
+           v
+Firmware no ESP32
+           |
+           v
+USB/Serial (115200 baud; protocolo MB1)
+           |
+           v
+EdgeController (Java + jSerialComm)
+           |
+           v
+Interpretação, calibração e comandos
+           |
+           v
+MotionboundGame (libGDX)
+           |
+           v
+Movimento, combate e interface
 ```
 
-*Esta árvore é uma sugestão de organização, não a estrutura atual do repositório. Ela poderá mudar quando o projeto libGDX for inicializado.*
+O firmware transmite amostras de inclinação, estado dos botões e contadores de gestos. A comunicação usa o protocolo `MB1`, com transmissão configurada para 50 Hz. O jogo recebe e valida os pacotes fora da thread de renderização, ignora mensagens inválidas ou repetidas e identifica interrupções na conexão.
 
-## Situação e etapas de desenvolvimento
+A calibração registra a posição neutra com a mão mantida parada por aproximadamente **2 segundos**. O jogador pode escolher três níveis de sensibilidade, trocar os eixos e inverter as direções. Caso não cheguem dados válidos por **0,5 segundo**, a partida é pausada e exige nova calibração antes de retomar.
 
-- [x] Definir nome e conceito geral do jogo;
-- [x] Escolher metodologia Kanban e organizar o Trello;
-- [x] Criar o repositório e confirmar o cadastro na disciplina;
-- [ ] Validar com o professor o controlador físico e os sensores propostos;
-- [ ] Construir e testar o controlador;
-- [ ] Inicializar o jogo em libGDX;
-- [ ] Integrar Arduino e controles do personagem;
-- [ ] Desenvolver combate, habilidades e interface;
-- [ ] Implementar tutorial e as cinco fases;
-- [ ] Implementar métricas e tela de resultados;
-- [ ] Testar o jogo, gerar executável e produzir o short paper.
+### 4.1. Comandos do modo reabilitação
 
-## 📋 Organização e acompanhamento
+| Ação no jogo | Comando físico |
+| --- | --- |
+| Movimentar o personagem | Inclinar a BlackBoard Edge |
+| Correr | Manter inclinação forte na mesma direção principal por 4 segundos |
+| Atacar com espada | Fazer gesto horizontal sobre o APDS-9960 |
+| Lançar magia | Fazer gesto para cima sobre o APDS-9960 |
+| Curar | Ação automática quando a vida está baixa, respeitando as cargas disponíveis |
+| Navegar pelos menus | Usar os botões do BRIICK Keypad |
 
-O desenvolvimento será acompanhado em um **quadro Kanban** com cinco estados: **Backlog, A fazer, Em andamento, Em revisão e Concluído**. Cada card representa uma entrega, dividida em atividades menores por meio de checklists.
+Na corrida, o jogo considera uma faixa de inclinação relativa à sensibilidade configurada. A preparação começa a partir de **60%** da faixa e é cancelada ao retornar abaixo de **40%**, parar ou alterar a direção principal. O HUD mostra o progresso dos quatro segundos e solicita que o jogador relaxe a inclinação quando o vigor se esgota.
 
-**Commits semanais:** cada integrante deve realizar pelo menos um commit de sua própria autoria **entre segunda-feira e domingo** e enviá-lo ao GitHub. Os commits devem representar alterações reais no projeto. O e-mail configurado no Git precisa estar associado à conta do GitHub correspondente.
+**Importante:** o hardware desta versão **não utiliza sensor de pressão ou preensão**. O APDS-9960 interpreta gestos; ele não mede a força da mão. Os indicadores de pressão disponíveis na simulação não representam medições reais da BlackBoard Edge.
 
-- [Quadro do Motionbound no Trello](https://trello.com/b/iN2g5cul/projeto-de-jogos-motionbound)
-- [Repositório do projeto](https://github.com/TuideTui/Motionbound)
-- [Cadastro confirmado na disciplina — Issue #42](https://github.com/leobrasil/jogos_digitais_2026-1/issues/42)
+### 4.2. Navegação pelo Keypad
 
-## Equipe
+| Botão | Função |
+| --- | --- |
+| 1 | Voltar / pausar |
+| 2 | Item anterior |
+| 3 | Confirmar |
+| 4 | Próximo item |
 
-**Arthur Cezar da Silveira Lima** — [@TuideTui](https://github.com/TuideTui)  
-**Turma:** 4H12
+## 5. Como executar no Windows
 
-*Outros integrantes poderão ser adicionados aqui, caso o grupo seja ampliado.*
+### 5.1. Pré-requisitos
 
-## Contexto acadêmico
+- Windows com suporte a aplicações desktop Java.
+- **JDK 17 ou superior** instalado e `javac` disponível no ambiente.
+- Acesso à internet na primeira execução para obter Gradle e dependências.
+- Para o modo reabilitação físico: BlackBoard Edge, APDS-9960 e Keypad, com firmware gravado e conexão USB.
 
-Projeto desenvolvido para a disciplina de **Jogos Digitais (2026)**, a partir da proposta de desenvolvimento de um jogo sério de reabilitação física com **libGDX e IoT**. Os entregáveis previstos incluem o código-fonte com commits semanais, um executável ou APK e um short paper de até seis páginas.
+O código do jogo está na pasta:
+
+[`Motionbound-v0.1.1-Windows-corrigido/Motionbound/`](Motionbound-v0.1.1-Windows-corrigido/Motionbound/)
+
+1. Clone o repositório ou baixe e extraia o ZIP do GitHub.
+2. Abra a pasta interna **`Motionbound`**, que contém `build.gradle` e `iniciar-jogo.bat`.
+3. No Windows, execute **`iniciar-jogo.bat`**.
+4. Aguarde a compilação e selecione o modo de jogo desejado.
+
+Na primeira execução, o script baixa localmente o Gradle 9.1.0 e obtém as dependências. Não é necessário instalar o Gradle globalmente.
+
+Para verificar o Java antes de iniciar, utilize `verificar-ambiente.bat`, na mesma pasta do jogo.
+
+### 5.2. Modo convencional
+
+| Comando | Ação |
+| --- | --- |
+| `WASD` ou setas | Movimentar |
+| `Shift` | Correr |
+| Mouse | Mirar |
+| Clique esquerdo | Espada |
+| Clique direito | Magia |
+| `Espaço` | Curar |
+| `Esc` | Pausar / voltar |
+| `R` | Reiniciar a fase |
+| `F11` | Alternar tela cheia e janela |
+
+### 5.3. Simulação sem hardware
+
+A opção **Experimentar simulação** permite testar parte do fluxo de controle por sensores sem conectar a Edge:
+
+- `I`, `J`, `K`, `L`: simular inclinação e movimento;
+- `F`: simular o acionamento do ataque por pressão;
+- `Shift + F`: simular pressão acima da faixa definida.
+
+Os dados desse modo são **artificiais**. A simulação não reproduz todos os gestos do dispositivo físico, como o comando de magia pelo APDS-9960, e não deve ser usada como avaliação de desempenho motor real.
+
+### 5.4. Preparação do controle físico
+
+1. Abra o sketch [`MotionboundDiagnostico.ino`](Motionbound-v0.1.1-Windows-corrigido/Motionbound/firmware/MotionboundDiagnostico/MotionboundDiagnostico.ino) na Arduino IDE, mantendo `SwipeDecoder.h` na mesma pasta.
+2. Selecione **ESP32 Dev Module** e a porta serial correspondente à Edge.
+3. Instale as bibliotecas **RoboCore - MMA8452Q**, **RoboCore - BRIICK Keypad** e **SparkFun APDS9960 RGB and Gesture Sensor**.
+4. Grave o firmware. Se desejar, valide sensores e botões pelo Monitor Serial a **115200 baud**.
+5. **Feche o Monitor Serial** antes de abrir o Motionbound, para liberar a porta USB.
+6. No jogo, selecione **Reabilitação**, calibre a posição neutra e confirme o início pelo Keypad.
+
+O sensor APDS-9960 deve ficar imóvel e voltado para a mão que executa os gestos. As instruções completas de montagem, testes e protocolo estão em [`firmware/README.md`](Motionbound-v0.1.1-Windows-corrigido/Motionbound/firmware/README.md).
+
+## 6. Métricas e acompanhamento
+
+A implementação atual registra e apresenta **métricas de jogo**, como tempo ativo da fase, guardiões derrotados e informações sobre ataques e acertos. Há também uma métrica de tempo de pressão na faixa **somente na simulação**, calculada com dados artificiais.
+
+O modo físico já utiliza leituras do acelerômetro para controlar a movimentação e reconhecer a manutenção da inclinação necessária à corrida. Entretanto, **a versão documentada ainda não calcula uma pontuação de precisão ou consistência motora baseada nas leituras físicas, nem compara esse indicador entre fases ou sessões**. Portanto, tempo de fase e porcentagem de acertos no combate não devem ser apresentados como medidas clínicas de evolução motora.
+
+Para contemplar integralmente o requisito acadêmico de avaliação do movimento, uma evolução prevista é registrar uma métrica de consistência da inclinação calibrada e exibi-la nos resultados das fases. Essa melhoria não é apresentada aqui como já implementada.
+
+## 7. Salvamento e interface
+
+O jogo permite salvar a expedição e continuar posteriormente. O arquivo de progresso é armazenado no Windows em:
+
+```text
+%USERPROFILE%\.motionbound\saves\expedition.json
+```
+
+O salvamento preserva a fase, a posição do personagem, recursos, inimigos e estados relevantes do combate. As opções de configuração do controle e de apresentação visual são guardadas separadamente nas preferências do aplicativo.
+
+O menu de pausa contém um **Diário da expedição**, **Tutorial**, **Bestiário** e **Configurações**. O bestiário reúne informações sobre inimigos e frascos, enquanto a opção **Efeitos reduzidos** adapta elementos visuais para maior conforto.
+
+## 8. Estrutura do código
+
+```text
+Motionbound/                           # Raiz do repositório
+├── README.md                          # Este documento
+└── Motionbound-v0.1.1-Windows-corrigido/
+    └── Motionbound/                    # Projeto Java/libGDX
+        ├── build.gradle
+        ├── settings.gradle
+        ├── iniciar-jogo.bat
+        ├── gerar-executavel.bat
+        ├── verificar-ambiente.bat
+        ├── assets/                     # Sprites, fonte, ícones e licenças
+        ├── art-source/                 # Origem e especificação do atlas do herói
+        ├── firmware/
+        │   ├── README.md
+        │   ├── MotionboundDiagnostico/ # Sketch e decodificador de gestos
+        │   └── tests/                 # Teste do decodificador
+        ├── scripts/                    # Inicialização e utilitários
+        └── src/
+            ├── main/java/br/edu/motionbound/
+            │   ├── DesktopLauncher.java
+            │   ├── MotionboundGame.java
+            │   ├── game/              # Campanha, mapas, combate, efeitos e save
+            │   ├── input/             # Teclado, simulação e controle Edge
+            │   └── ui/                # HUD, menus, tutorial e bestiário
+            └── verification/java/      # Verificações automatizadas
+```
+
+**Organização da implementação:** `MotionboundGame` centraliza o fluxo das partidas; `CampaignLevel` descreve as cinco etapas; `DungeonMap` e classes de combate tratam cenários e confrontos; `EdgeController` faz a comunicação com o dispositivo físico; `GameUi` e componentes de `ui/` implementam as telas; `SaveData` serializa e valida o progresso.
+
+## 9. Compilação, testes e pacote para entrega
+
+Dentro da pasta interna `Motionbound`, execute:
+
+- **`iniciar-jogo.bat`** — compila e inicia o jogo;
+- **`gerar-executavel.bat`** — gera o JAR com dependências em `build/libs/Motionbound-0.1.1-all.jar`;
+- **`verificar-ambiente.bat`** — verifica o ambiente de execução.
+
+Após a primeira inicialização, também é possível chamar as tarefas de verificação do Gradle instalado localmente:
+
+```powershell
+.\.tools\gradle-9.1.0\bin\gradle.bat check
+.\.tools\gradle-9.1.0\bin\gradle.bat verifyDesktop
+```
+
+As tarefas previstas no `build.gradle` verificam aspectos de campanha, regras de combate, efeitos, controle e salvamento. `verifyDesktop` realiza uma verificação da aplicação desktop. O teste `verifyEdgeUsb` requer o dispositivo físico conectado; não equivale a um teste automatizado sem hardware.
+
+**Observação sobre a entrega:** o arquivo `.jar` contém as dependências Java do jogo, mas **não inclui necessariamente um runtime Java**. Para executá-lo em outro computador, é necessário um Java compatível ou um pacote Windows preparado com runtime. O ZIP de código-fonte e o pacote executável devem ser organizados e testados separadamente antes da entrega acadêmica.
+
+## 10. Arte e recursos externos
+
+O projeto utiliza recursos de *pixel art* da [Kenney](https://kenney.nl/), incluindo **Tiny Dungeon**, **Tiny Town**, **Tiny Farm**, **Tiny Ski**, **Input Prompts Pixel** e **Kenney Pixel**. Os avisos e arquivos de licença correspondentes estão incluídos em `assets/`.
+
+As animações do personagem principal utilizam um atlas produzido com auxílio de IA e adaptado ao projeto. O arquivo de origem e as instruções de geração estão em [`art-source/`](Motionbound-v0.1.1-Windows-corrigido/Motionbound/art-source/). Esse atlas **não é um recurso da Kenney**.
+
+O jogo utiliza ainda libGDX e jSerialComm; os avisos de licença do jSerialComm estão em [`assets/licenses/jSerialComm/`](Motionbound-v0.1.1-Windows-corrigido/Motionbound/assets/licenses/jSerialComm/).
+
+## 11. Desenvolvimento e acompanhamento
+
+O desenvolvimento foi organizado por um quadro **Kanban no Trello**, com atividades planejadas, em andamento, em revisão e concluídas. O repositório GitHub mantém o histórico das alterações realizadas durante o projeto. Os commits são feitos manualmente pelo aluno, conforme o acompanhamento semanal solicitado pela disciplina.
+
+- **Repositório:** https://github.com/TuideTui/Motionbound
+- **Quadro Kanban:** https://trello.com/b/iN2g5cul/projeto-de-jogos-motionbound
+
+## 12. Autoria
+
+**Arthur Cezar da Silveira Lima** — RA **10409172**  
+**Curso:** Ciência da Computação  
+**Turma:** 4H12  
+**Instituição:** Universidade Presbiteriana Mackenzie  
+**Disciplina:** Jogos Digitais  
+**GitHub:** [@TuideTui](https://github.com/TuideTui)
 
 ---
 
-**Motionbound - do movimento real à aventura virtual.**
+*Motionbound - do movimento real à aventura virtual.*
